@@ -5,9 +5,11 @@ dist/
 .env
 
 # Rust
-/app/src-tauri/target/
-/app/src-tauri/gen/
+target/
 **/*.rs.bk
+
+# App data
+data/
 
 # Editors
 .vscode/
@@ -18,3 +20,14 @@ CompiledApps/
 *.log
 Error.html
 **/LatestError.html
+
+# Original Tauri app (preserved for reference)
+/app/src-tauri/target/
+/app/src-tauri/gen/
+/app/node_modules/
+
+# Build artifacts
+*.dmg
+*.exe
+*.AppImage
+*.deb

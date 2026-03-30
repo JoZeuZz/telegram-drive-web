@@ -1,0 +1,46 @@
+[Unit]
+Description=Telegram Drive Web Server
+Documentation=https://github.com/nicnocquee/Telegram-Drive
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=telegram-drive
+Group=telegram-drive
+WorkingDirectory=/opt/telegram-drive-web
+EnvironmentFile=/opt/telegram-drive-web/.env
+ExecStart=/opt/telegram-drive-web/telegram-drive-server
+
+# Restart policy
+Restart=on-failure
+RestartSec=5
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=telegram-drive
+
+# Resource limits (suitable for LXC with 512MB–1GB RAM)
+LimitNOFILE=4096
+MemoryMax=768M
+
+# Security hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/telegram-drive-web/data
+PrivateTmp=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictNamespaces=true
+RestrictRealtime=true
+LockPersonality=true
+SystemCallArchitectures=native
+
+[Install]
+WantedBy=multi-user.target

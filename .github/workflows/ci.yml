@@ -1,0 +1,107 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ── Rust server ──────────────────────────────────────────
+  server:
+    name: Server (Rust)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: server
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo registry + build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            server/target
+          key: cargo-${{ runner.os }}-${{ hashFiles('server/Cargo.lock') }}
+          restore-keys: cargo-${{ runner.os }}-
+
+      - name: Install system deps
+        run: sudo apt-get update && sudo apt-get install -y libssl-dev pkg-config
+
+      - name: Check formatting
+        run: cargo fmt -- --check
+
+      - name: Clippy lints
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: Build (release)
+        run: cargo build --release
+
+      - name: Run tests
+        run: cargo test --release
+
+      - name: Upload binary artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: telegram-drive-server
+          path: server/target/release/telegram-drive-server
+          retention-days: 7
+
+  # ── Web frontend ─────────────────────────────────────────
+  web:
+    name: Frontend (Web)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type check
+        run: npx tsc --noEmit
+
+      - name: Build
+        run: npm run build
+
+      - name: Upload dist artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: telegram-drive-web-dist
+          path: web/dist/
+          retention-days: 7
+
+  # ── Tauri residual check ─────────────────────────────────
+  no-tauri:
+    name: Verify no Tauri deps
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check web/src for @tauri-apps or invoke()
+        run: |
+          if grep -rn '@tauri-apps\|invoke(' web/src/ server/src/ 2>/dev/null | grep -v '// '; then
+            echo "::error::Found residual Tauri references"
+            exit 1
+          fi
+          echo "No Tauri residuals found ✓"

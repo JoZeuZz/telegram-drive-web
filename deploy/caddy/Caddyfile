@@ -1,0 +1,39 @@
+# Caddy reverse proxy for telegram-drive-web
+# Automatic HTTPS via Let's Encrypt when using a public domain.
+# For LAN-only / VPN usage, replace domain with :80 or use tls internal.
+
+telegram-drive.example.com {
+    root * /opt/telegram-drive-web/web/dist
+    file_server
+
+    # Security headers
+    header {
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "DENY"
+        Referrer-Policy "strict-origin-when-cross-origin"
+        -Server
+    }
+
+    # Login rate limit: 5 events per minute
+    @login path /api/app-auth/login
+    rate_limit @login {
+        zone login {
+            key {remote_host}
+            events 5
+            window 1m
+        }
+    }
+
+    # API reverse proxy
+    handle /api/* {
+        reverse_proxy 127.0.0.1:8080 {
+            header_up X-Forwarded-For {remote_host}
+            flush_interval -1
+        }
+    }
+
+    # SPA fallback
+    handle {
+        try_files {path} /index.html
+    }
+}

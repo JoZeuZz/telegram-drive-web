@@ -1,0 +1,17 @@
+NOTICE — telegram-drive-web
+
+This project is a fork of Telegram-Drive by Cameron Amer.
+Original repository: https://github.com/caamer20/Telegram-Drive
+Original license: MIT
+
+This fork converts the original Tauri desktop application into a headless
+web server suitable for self-hosted deployment.
+
+Third-party components:
+- grammers (Telegram MTProto client for Rust): https://github.com/Lonami/grammers
+- Actix Web: https://actix.rs/
+- React: https://react.dev/
+- Vite: https://vite.dev/
+- TailwindCSS: https://tailwindcss.com/
+
+All third-party components retain their original licenses.

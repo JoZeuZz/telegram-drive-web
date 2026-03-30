@@ -1,0 +1,48 @@
+use actix_web::{delete, get, post, web, HttpResponse};
+
+use crate::app_state::AppState;
+use crate::domain::dto::*;
+use crate::errors::AppError;
+use crate::services::telegram_folders;
+
+/// GET /api/folders
+#[get("")]
+async fn list_folders(state: web::Data<AppState>) -> Result<HttpResponse, AppError> {
+    let folders = telegram_folders::scan_folders(&state).await?;
+    Ok(HttpResponse::Ok().json(folders))
+}
+
+/// POST /api/folders
+#[post("")]
+async fn create_folder(
+    body: web::Json<CreateFolderRequest>,
+    state: web::Data<AppState>,
+) -> Result<HttpResponse, AppError> {
+    let folder = telegram_folders::create_folder(&state, &body.name).await?;
+    Ok(HttpResponse::Created().json(folder))
+}
+
+/// DELETE /api/folders/{folder_id}
+#[delete("/{folder_id}")]
+async fn delete_folder(
+    path: web::Path<i64>,
+    state: web::Data<AppState>,
+) -> Result<HttpResponse, AppError> {
+    let folder_id = path.into_inner();
+    telegram_folders::delete_folder(&state, folder_id).await?;
+    Ok(HttpResponse::Ok().json(SuccessResponse { success: true }))
+}
+
+/// POST /api/folders/sync — force rescan of Telegram folders.
+#[post("/sync")]
+async fn sync_folders(state: web::Data<AppState>) -> Result<HttpResponse, AppError> {
+    let folders = telegram_folders::scan_folders(&state).await?;
+    Ok(HttpResponse::Ok().json(folders))
+}
+
+pub fn configure(cfg: &mut web::ServiceConfig) {
+    cfg.service(list_folders)
+        .service(create_folder)
+        .service(sync_folders)
+        .service(delete_folder);
+}

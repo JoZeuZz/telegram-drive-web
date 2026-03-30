@@ -1,0 +1,74 @@
+[package]
+name = "telegram-drive-server"
+version = "0.1.0"
+edition = "2021"
+description = "Headless web server for Telegram Drive — API, streaming, and Telegram integration"
+authors = ["telegram-drive-web contributors"]
+
+[[bin]]
+name = "telegram-drive-server"
+path = "src/main.rs"
+
+[dependencies]
+# Web framework
+actix-web = "4"
+actix-cors = "0.7"
+actix-rt = "2"
+
+# Async runtime
+tokio = { version = "1", features = ["full"] }
+futures = "0.3"
+async-stream = "0.3"
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Telegram client
+grammers-client = { git = "https://github.com/Lonami/grammers", rev = "d07f96f" }
+grammers-session = { git = "https://github.com/Lonami/grammers", rev = "d07f96f" }
+grammers-mtsender = { git = "https://github.com/Lonami/grammers", rev = "d07f96f" }
+grammers-tl-types = { git = "https://github.com/Lonami/grammers", rev = "d07f96f" }
+
+# Date/time
+chrono = "0.4"
+
+# Encoding
+base64 = "0.21"
+
+# Logging
+log = "0.4"
+env_logger = "0.11"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+
+# Error handling
+anyhow = "1"
+thiserror = "1"
+
+# Auth & security
+argon2 = "0.5"
+uuid = { version = "1", features = ["v4"] }
+rand = "0.8"
+
+# Database — NOTE: grammers-session uses `sqlite` crate internally.
+# We use the same `sqlite` crate to avoid native lib conflicts.
+sqlite = "0.37"
+
+# Cookie sessions
+actix-session = { version = "0.10", features = ["cookie-session"] }
+
+# Multipart file uploads
+actix-multipart = "0.7"
+
+# MIME type guessing
+mime_guess = "2"
+
+# Configuration
+dotenvy = "0.15"
+
+# Cookie/session
+cookie = "0.18"
+
+[dev-dependencies]
+actix-test = "0.1"

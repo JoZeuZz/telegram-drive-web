@@ -1,102 +1,66 @@
-# Telegram Drive 
+# telegram-drive-web
 
-**Telegram Drive** is an open-source, cross-platform desktop application that turns your Telegram account into an unlimited, secure cloud storage drive. Built with **Tauri**, **Rust**, and **React**.
+A headless web server that turns your Telegram account into a personal cloud drive. Access your files through a browser, manage folders backed by Telegram channels, stream media, and upload/download — all self-hosted behind your VPN.
 
-![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)
-![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20MacOS%20%7C%20Linux-blue)
+> Fork of [Telegram-Drive](https://github.com/caamer20/Telegram-Drive) by Cameron Amer. Converted from Tauri desktop app to a deployable web server.
 
+## Features
 
-![Auth Screen](screenshots/AuthScreen.png)
+- **Telegram as storage** — files are stored as messages in Saved Messages and private channels
+- **Web interface** — React SPA accessible from any browser
+- **Media streaming** — stream video and audio directly without downloading
+- **Folder management** — create, sync, and organize folders (Telegram channels)
+- **Search** — global search across all folders
+- **Self-hosted** — runs on your own server, no third-party services
+- **VPN-only access** — designed for homelab behind WireGuard/Tailscale
 
-##  What is Telegram Drive?
+## Architecture
 
-Telegram Drive leverages the Telegram API to allow you to upload, organize, and manage files directly on Telegram's servers. It treats your "Saved Messages" and created Channels as folders, giving you a familiar file explorer interface for your Telegram cloud.
+```
+server/     Rust backend — Actix-Web API + Telegram integration
+web/        React frontend — Vite SPA
+deploy/     systemd, nginx, caddy, docker configs
+docs/       Architecture, security, API, deployment guides
+```
 
-###  Key Features
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full design.
 
-*   **Unlimited Cloud Storage**: Utilizing Telegram's generous cloud infrastructure.
-*   **High Performance Grid**: Virtual scrolling handles folders with thousands of files instantly.
-*   **Auto-Updates**: Seamless updates for Windows, macOS, and Linux.
-*   **Media Streaming**: Stream video and audio files directly without downloading.
-*   **Drag & Drop**: Intuitive drag-and-drop upload and file management.
-*   **Thumbnail Previews**: Inline thumbnails for images and media files.
-*   **Folder Management**: Create "Folders" (private Telegram Channels) to organize content.
-*   **Privacy Focused**: API keys and data stay local. No third-party servers.
-*   **Cross-Platform**: Native apps for macOS (Intel/ARM), Windows, and Linux.
-
-##  Screenshots
-
-| Dashboard | File Preview |
-|-----------|--------------|
-| ![Dashboard](screenshots/DashboardWithFiles.png) | ![Preview](screenshots/ImagePreview.png) |
-
-| Grid View | Authentication |
-|-----------|----------------|
-| ![Dark Mode](screenshots/DarkModeGrid.png) | ![Login](screenshots/LoginScreen.png) |
-
-| Audio Playback | Video Playback |
-|----------------|----------------|
-| ![Audio Playback](screenshots/AudioPlayback.png) | ![Video Playback](screenshots/VideoPlayback.png) |
-
-| Auth Code Screen | Upload Example |
-|------------------|-------------|
-| ![Auth Code Screen](screenshots/AuthCodeScreen.png) | ![Upload Example](screenshots/UploadExample.png) |
-
-| Folder Creation | Folder List View |
-|-----------------|------------------|
-| ![Folder Creation](screenshots/FolderCreation.png) | ![Folder List View](screenshots/FolderListView.png) |
-
-##  Tech Stack
-
-*   **Frontend**: React, TypeScript, TailwindCSS, Framer Motion
-*   **Backend**: Rust (Tauri), Grammers (Telegram Client)
-*   **Build Tool**: Vite
-
-
-##  Getting Started
+## Quick start (development)
 
 ### Prerequisites
-*   Node.js (v18+)
-*   Rust (latest stable)
-*   A Telegram Account
-*   API ID and Hash from [my.telegram.org](https://my.telegram.org)
+- Rust (stable)
+- Node.js 18+
+- Telegram API credentials from [my.telegram.org](https://my.telegram.org)
 
-### Installation
+### Backend
+```bash
+cd server
+cp .env.example .env
+# Edit .env with your settings
+cargo run
+```
 
-1.  **Clone the repository**
-    ```bash
-    git clone https://github.com/caamer20/Telegram-Drive.git
-    cd Telegram-Drive
-    ```
+### Frontend
+```bash
+cd web
+npm install
+npm run dev
+```
 
-2.  **Install Dependencies**
-    ```bash
-    cd app
-    npm install
-    ```
+The frontend dev server runs on `http://localhost:3000` and proxies API calls to `http://localhost:8080`.
 
-3.  **Run in Development Mode**
-    ```bash
-    npm run tauri dev
-    ```
+## Deployment
 
-4.  **Build/Compile**
-    ```bash
-    npm run tauri build
-    ```
+See [docs/DEPLOYMENT_LXC.md](docs/DEPLOYMENT_LXC.md) for production deployment on Proxmox LXC.
 
-##  Open Source & License
+## Security
 
-This project is **Free and Open Source Software**. You are free to use, modify, and distribute it.
+This app is designed for **single-user homelab deployment behind a VPN**. See [docs/SECURITY.md](docs/SECURITY.md).
 
-Licensed under the **MIT License**.
+## Migration status
 
----
-*Disclaimer: This application is not affiliated with Telegram FZ-LLC. Use responsibly and in accordance with Telegram's Terms of Service.*
+This project is being incrementally migrated from the Tauri desktop app. See [docs/MIGRATION_FROM_TAURI.md](docs/MIGRATION_FROM_TAURI.md) for current status.
 
-If you're looking for a version of this app that's optimized for VPNs check out this repo:
-https://github.com/caamer20/Telegram-Drive-ForVPNs
+## License
 
-<a href="https://www.paypal.me/Caamer20">
-  <img src="https://raw.githubusercontent.com/stefan-niedermann/paypal-donate-button/master/paypal-donate-button.png" alt="Donate with PayPal" width="200" />
-</a>
+MIT — see [LICENSE](LICENSE) and [NOTICE](NOTICE) for attribution.
