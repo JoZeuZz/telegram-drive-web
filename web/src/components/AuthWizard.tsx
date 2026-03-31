@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Phone, Key, Lock, ArrowRight, Settings, Sun, Moon, HelpCircle, ExternalLink, X } from "lucide-react";
 import { useTheme } from '../context/ThemeContext';
 
-type Step = "setup" | "phone" | "code" | "password";
+type Step = "app" | "setup" | "phone" | "code" | "password";
 
 function AuthThemeToggle() {
     const { theme, toggleTheme } = useTheme();
@@ -23,8 +23,11 @@ function AuthThemeToggle() {
     );
 }
 export function AuthWizard({ onLogin }: { onLogin: () => void }) {
-    const [step, setStep] = useState<Step>("setup");
+    const [step, setStep] = useState<Step>("app");
+    const [authChecked, setAuthChecked] = useState(false);
     const [loading, setLoading] = useState(false);
+
+    const [appPassword, setAppPassword] = useState("");
 
     const [apiId, setApiId] = useState("");
     const [apiHash, setApiHash] = useState("");
@@ -49,15 +52,30 @@ export function AuthWizard({ onLogin }: { onLogin: () => void }) {
     }, [floodWait]);
 
     useEffect(() => {
+        const checkAppAuth = async () => {
+            try {
+                const status = await api.authStatus();
+                setStep(status.authenticated ? "setup" : "app");
+            } catch {
+                setStep("app");
+            } finally {
+                setAuthChecked(true);
+            }
+        };
+
+        checkAppAuth();
+    }, []);
+
+    useEffect(() => {
         const savedId = localStorage.getItem('api_id');
-        const savedHash = localStorage.getItem('api_hash');
+        const savedHash = sessionStorage.getItem('api_hash');
         if (savedId) setApiId(savedId);
         if (savedHash) setApiHash(savedHash);
     }, []);
 
     const saveCredentials = () => {
         localStorage.setItem('api_id', apiId);
-        localStorage.setItem('api_hash', apiHash);
+        sessionStorage.setItem('api_hash', apiHash);
     };
 
     const handleSetupSubmit = async (e: React.FormEvent) => {
@@ -77,6 +95,27 @@ export function AuthWizard({ onLogin }: { onLogin: () => void }) {
         setStep("phone");
     };
 
+    const handleAppLoginSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setLoading(true);
+        setError(null);
+
+        try {
+            await api.login(appPassword);
+            setAppPassword("");
+            setStep("setup");
+            onLogin();
+        } catch (err: unknown) {
+            if (err instanceof api.ApiError && err.status === 401) {
+                setError("Invalid app password.");
+            } else {
+                setError(err instanceof Error ? err.message : String(err));
+            }
+        } finally {
+            setLoading(false);
+        }
+    };
+
     const handlePhoneSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setLoading(true);
@@ -88,6 +127,12 @@ export function AuthWizard({ onLogin }: { onLogin: () => void }) {
             await api.telegramRequestCode(phone, idInt, apiHash);
             setStep("code");
         } catch (err: unknown) {
+            if (err instanceof api.ApiError && err.status === 401) {
+                setError("Not authenticated. Please sign in with your app password first.");
+                setStep("app");
+                return;
+            }
+
             const msg = err instanceof Error ? err.message : JSON.stringify(err);
             if (msg.includes("FLOOD_WAIT_")) {
                 const parts = msg.split("FLOOD_WAIT_");
@@ -104,6 +149,16 @@ export function AuthWizard({ onLogin }: { onLogin: () => void }) {
             setLoading(false);
         }
     };
+
+    if (!authChecked) {
+        return (
+            <div className="h-full w-full auth-gradient flex items-center justify-center p-6 relative">
+                <div className="auth-glass p-8 rounded-3xl shadow-2xl w-full max-w-md text-center">
+                    <p className="text-white/80 text-sm">Checking session...</p>
+                </div>
+            </div>
+        );
+    }
 
     const handleCodeSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -188,6 +243,43 @@ export function AuthWizard({ onLogin }: { onLogin: () => void }) {
                     ) : (
                         <>
 
+
+                            {step === "app" && (
+                                <motion.form
+                                    key="app"
+                                    initial={{ x: 20, opacity: 0 }}
+                                    animate={{ x: 0, opacity: 1 }}
+                                    exit={{ x: -20, opacity: 0 }}
+                                    onSubmit={handleAppLoginSubmit}
+                                    className="space-y-5"
+                                >
+                                    <div className="space-y-2">
+                                        <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider">App Password</label>
+                                        <div className="relative">
+                                            <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 auth-form-icon" />
+                                            <input
+                                                type="password"
+                                                value={appPassword}
+                                                onChange={(e) => setAppPassword(e.target.value)}
+                                                placeholder="Enter admin password"
+                                                className="w-full glass-input rounded-xl pl-12 pr-4 py-3.5 text-white placeholder-gray-600 focus:outline-none focus:border-blue-500 transition-all text-sm"
+                                                autoFocus
+                                            />
+                                        </div>
+                                        <p className="text-xs text-gray-400">
+                                            Sign in to your local Telegram Drive server first.
+                                        </p>
+                                    </div>
+
+                                    <button
+                                        type="submit"
+                                        disabled={loading || !appPassword}
+                                        className="w-full bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 text-white font-bold py-4 rounded-xl flex items-center justify-center gap-2 transition-all shadow-lg shadow-blue-900/20 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                        {loading ? "Signing in..." : <>Continue <ArrowRight className="w-4 h-4" /></>}
+                                    </button>
+                                </motion.form>
+                            )}
 
                             {step === "setup" && (
                                 <motion.form

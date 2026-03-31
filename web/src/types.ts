@@ -13,7 +13,7 @@ export interface TelegramFile {
 export interface TelegramFolder {
     id: number;
     name: string;
-    parent_id?: number | null;
+    parent_id: number | null;
 }
 
 export interface QueueItem {

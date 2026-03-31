@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { HardDrive, Folder, Plus, RefreshCw, LogOut } from 'lucide-react';
 import { SidebarItem } from './SidebarItem';
 import { BandwidthWidget } from './BandwidthWidget';
@@ -10,7 +10,7 @@ interface SidebarProps {
     setActiveFolderId: (id: number | null) => void;
     onDrop: (e: React.DragEvent, folderId: number | null) => void;
     onDelete: (id: number, name: string) => void;
-    onCreate: (name: string) => Promise<void>;
+    onCreate: (name: string, parentId?: number | null) => Promise<void>;
     isSyncing: boolean;
     isConnected: boolean;
     onSync: () => void;
@@ -22,19 +22,172 @@ export function Sidebar({
     folders, activeFolderId, setActiveFolderId, onDrop, onDelete, onCreate,
     isSyncing, isConnected, onSync, onLogout, bandwidth
 }: SidebarProps) {
-    const [showNewFolderInput, setShowNewFolderInput] = useState(false);
+    const [createTargetParentId, setCreateTargetParentId] = useState<number | null | undefined>(undefined);
     const [newFolderName, setNewFolderName] = useState("");
+    const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set());
+
+    const folderById = useMemo(() => {
+        return new Map<number, TelegramFolder>(folders.map((folder) => [folder.id, folder]));
+    }, [folders]);
+
+    const childrenByParent = useMemo(() => {
+        const map = new Map<number | null, TelegramFolder[]>();
+
+        for (const folder of folders) {
+            const rawParentId = folder.parent_id ?? null;
+            const parentId = rawParentId !== null && rawParentId !== folder.id && folderById.has(rawParentId)
+                ? rawParentId
+                : null;
+
+            const siblings = map.get(parentId) ?? [];
+            siblings.push(folder);
+            map.set(parentId, siblings);
+        }
+
+        for (const [, nodes] of map) {
+            nodes.sort((a, b) => a.name.localeCompare(b.name));
+        }
+
+        return map;
+    }, [folders, folderById]);
+
+    const rootFolders = childrenByParent.get(null) ?? [];
+
+    useEffect(() => {
+        setExpandedIds((prev) => {
+            const next = new Set<number>();
+            const currentIds = new Set(folders.map((folder) => folder.id));
+
+            for (const id of prev) {
+                if (currentIds.has(id)) {
+                    next.add(id);
+                }
+            }
+
+            let cursor = activeFolderId;
+            const guard = new Set<number>();
+            while (cursor !== null && !guard.has(cursor)) {
+                guard.add(cursor);
+
+                const current = folderById.get(cursor);
+                if (!current) break;
+
+                const parentId = current.parent_id ?? null;
+                if (parentId !== null && parentId !== current.id && folderById.has(parentId)) {
+                    next.add(parentId);
+                    cursor = parentId;
+                } else {
+                    break;
+                }
+            }
+
+            return next;
+        });
+    }, [folders, activeFolderId, folderById]);
+
+    useEffect(() => {
+        if (createTargetParentId === undefined || createTargetParentId === null) return;
+        if (!folderById.has(createTargetParentId)) {
+            setCreateTargetParentId(undefined);
+            setNewFolderName('');
+        }
+    }, [createTargetParentId, folderById]);
+
+    const openCreateInput = (parentId: number | null) => {
+        setCreateTargetParentId(parentId);
+        setNewFolderName('');
+
+        if (parentId !== null) {
+            setExpandedIds((prev) => {
+                const next = new Set(prev);
+                next.add(parentId);
+                return next;
+            });
+        }
+    };
+
+    const toggleExpanded = (folderId: number) => {
+        setExpandedIds((prev) => {
+            const next = new Set(prev);
+            if (next.has(folderId)) {
+                next.delete(folderId);
+            } else {
+                next.add(folderId);
+            }
+            return next;
+        });
+    };
 
     const submitCreate = async () => {
         if (!newFolderName.trim()) return;
+
+        const parentId = createTargetParentId === undefined ? null : createTargetParentId;
         try {
-            await onCreate(newFolderName);
-            setNewFolderName("");
-            setShowNewFolderInput(false);
+            await onCreate(newFolderName.trim(), parentId);
+            setNewFolderName('');
+            setCreateTargetParentId(undefined);
         } catch {
             // handled by parent
         }
-    }
+    };
+
+    const renderCreateInput = (parentId: number | null, depth: number) => {
+        if (createTargetParentId !== parentId) return null;
+
+        return (
+            <div className="px-3 py-1" style={{ paddingLeft: `${12 + depth * 16}px` }}>
+                <input
+                    autoFocus
+                    type="text"
+                    className="w-full bg-white/10 rounded px-2 py-1 text-sm text-white focus:outline-none focus:ring-1 focus:ring-telegram-primary"
+                    placeholder={parentId === null ? 'Folder Name' : 'Subfolder Name'}
+                    value={newFolderName}
+                    onChange={e => setNewFolderName(e.target.value)}
+                    onKeyDown={e => {
+                        if (e.key === 'Enter') submitCreate();
+                        if (e.key === 'Escape') {
+                            setCreateTargetParentId(undefined);
+                            setNewFolderName('');
+                        }
+                    }}
+                    onBlur={() => {
+                        if (!newFolderName.trim()) {
+                            setCreateTargetParentId(undefined);
+                        }
+                    }}
+                />
+            </div>
+        );
+    };
+
+    const renderTree = (folder: TelegramFolder, depth: number): React.ReactNode => {
+        const children = childrenByParent.get(folder.id) ?? [];
+        const hasChildren = children.length > 0;
+        const expanded = expandedIds.has(folder.id);
+
+        return (
+            <div key={folder.id} className="space-y-1">
+                <SidebarItem
+                    icon={Folder}
+                    label={folder.name}
+                    active={activeFolderId === folder.id}
+                    depth={depth}
+                    hasChildren={hasChildren}
+                    expanded={expanded}
+                    onToggleExpand={hasChildren ? () => toggleExpanded(folder.id) : undefined}
+                    onClick={() => setActiveFolderId(folder.id)}
+                    onDrop={(e: React.DragEvent) => onDrop(e, folder.id)}
+                    onDelete={() => onDelete(folder.id, folder.name)}
+                    onCreateChild={() => openCreateInput(folder.id)}
+                    folderId={folder.id}
+                />
+
+                {renderCreateInput(folder.id, depth + 1)}
+
+                {hasChildren && expanded && children.map((child) => renderTree(child, depth + 1))}
+            </div>
+        );
+    };
 
     return (
         <aside className="w-64 bg-telegram-surface border-r border-telegram-border flex flex-col" onClick={e => e.stopPropagation()}>
@@ -52,42 +205,22 @@ export function Sidebar({
                     onDrop={(e: React.DragEvent) => onDrop(e, null)}
                     folderId={null}
                 />
-                {folders.map(folder => (
-                    <SidebarItem
-                        key={folder.id}
-                        icon={Folder}
-                        label={folder.name}
-                        active={activeFolderId === folder.id}
-                        onClick={() => setActiveFolderId(folder.id)}
-                        onDrop={(e: React.DragEvent) => onDrop(e, folder.id)}
-                        onDelete={() => onDelete(folder.id, folder.name)}
-                        folderId={folder.id}
-                    />
-                ))}
 
+                {renderCreateInput(null, 0)}
 
-                {showNewFolderInput ? (
-                    <div className="px-3 py-2">
-                        <input
-                            autoFocus
-                            type="text"
-                            className="w-full bg-white/10 rounded px-2 py-1 text-sm text-white focus:outline-none focus:ring-1 focus:ring-telegram-primary"
-                            placeholder="Folder Name"
-                            value={newFolderName}
-                            onChange={e => setNewFolderName(e.target.value)}
-                            onKeyDown={e => e.key === 'Enter' && submitCreate()}
-                            onBlur={() => !newFolderName && setShowNewFolderInput(false)}
-                        />
-                    </div>
-                ) : (
+                {createTargetParentId !== null && (
                     <button
-                        onClick={() => setShowNewFolderInput(true)}
+                        onClick={() => openCreateInput(null)}
                         className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-telegram-subtext hover:bg-telegram-hover hover:text-telegram-text transition-colors border border-dashed border-telegram-border mt-2"
                     >
                         <Plus className="w-4 h-4" />
                         Create Folder
                     </button>
                 )}
+
+                <div className="space-y-1 mt-2">
+                    {rootFolders.map((folder) => renderTree(folder, 0))}
+                </div>
             </nav>
 
             <div className="p-4 border-t border-telegram-border">

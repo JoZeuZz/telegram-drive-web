@@ -17,7 +17,8 @@ interface FileExplorerProps {
     viewMode: 'grid' | 'list';
     selectedIds: number[];
     activeFolderId: number | null;
-    onFileClick: (e: React.MouseEvent, id: number) => void;
+    onFileClick: (e: React.MouseEvent, id: number, orderedIds: number[]) => void;
+    onVisibleOrderChange?: (orderedIds: number[]) => void;
     onDelete: (id: number) => void;
     onDownload: (id: number, name: string) => void;
     onPreview: (file: TelegramFile, orderedFiles?: TelegramFile[]) => void;
@@ -57,7 +58,7 @@ function useGridColumns(containerRef: React.RefObject<HTMLDivElement | null>) {
 
 export function FileExplorer({
     files, loading, error, viewMode, selectedIds, activeFolderId,
-    onFileClick, onDelete, onDownload, onPreview, onManualUpload, onSelectionClear, onDrop, onDragStart, onDragEnd
+    onFileClick, onVisibleOrderChange, onDelete, onDownload, onPreview, onManualUpload, onSelectionClear, onDrop, onDragStart, onDragEnd
 }: FileExplorerProps) {
     const [sortField, setSortField] = useState<SortField>('name');
     const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
@@ -94,6 +95,12 @@ export function FileExplorer({
             return sortDirection === 'asc' ? comparison : -comparison;
         });
     }, [files, sortField, sortDirection]);
+
+    const sortedIds = useMemo(() => sortedFiles.map((f) => f.id), [sortedFiles]);
+
+    useEffect(() => {
+        onVisibleOrderChange?.(sortedIds);
+    }, [sortedIds, onVisibleOrderChange]);
 
     const handlePreviewRequest = useCallback((file: TelegramFile) => {
         onPreview(file, sortedFiles);
@@ -243,7 +250,7 @@ export function FileExplorer({
                                                 key={file.id}
                                                 file={file}
                                                 isSelected={selectedIds.includes(file.id)}
-                                                onClick={(e) => onFileClick(e, file.id)}
+                                                onClick={(e) => onFileClick(e, file.id, sortedIds)}
                                                 onContextMenu={(e) => handleContextMenu(e, file)}
                                                 onDelete={() => onDelete(file.id)}
                                                 onDownload={() => onDownload(file.id, file.name)}
@@ -310,6 +317,7 @@ export function FileExplorer({
                                 >
                                     <FileListItem
                                         file={file}
+                                        orderedIds={sortedIds}
                                         selectedIds={selectedIds}
                                         onFileClick={onFileClick}
                                         handleContextMenu={handleContextMenu}
@@ -343,7 +351,7 @@ export function FileExplorer({
                     }}
                     onPreview={() => {
                         if (contextMenu.file.type === 'folder') {
-                            onFileClick({ preventDefault: () => { }, stopPropagation: () => { } } as React.MouseEvent, contextMenu.file.id);
+                            onFileClick({ preventDefault: () => { }, stopPropagation: () => { } } as React.MouseEvent, contextMenu.file.id, sortedIds);
                         } else {
                             handlePreviewRequest(contextMenu.file);
                         }

@@ -1,5 +1,5 @@
 # ── Stage 1: build the Rust binary ───────────────────────────────────
-FROM rust:1.82-bookworm AS builder
+FROM rust:1-bookworm AS builder
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
         pkg-config libssl-dev libsqlite3-dev && \
@@ -21,23 +21,24 @@ RUN cargo build --release
 FROM debian:bookworm-slim
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        ca-certificates libssl3 libsqlite3-0 && \
+    ca-certificates curl libssl3 libsqlite3-0 && \
     rm -rf /var/lib/apt/lists/*
 
 RUN groupadd -r tdrive && useradd -r -g tdrive -m tdrive
 
 COPY --from=builder /build/target/release/telegram-drive-server /usr/local/bin/
+COPY deploy/docker/docker-entrypoint-server.sh /usr/local/bin/docker-entrypoint-server.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint-server.sh
 
-USER tdrive
 WORKDIR /home/tdrive
 
-ENV TD_DATA_DIR=/home/tdrive/data \
-    TD_CACHE_DIR=/home/tdrive/cache \
-    TD_HOST=0.0.0.0 \
-    TD_PORT=8080
+ENV DATA_DIR=/home/tdrive/data \
+    CACHE_DIR=/home/tdrive/cache \
+    HOST=0.0.0.0 \
+    PORT=8080
 
 EXPOSE 8080
 
 VOLUME ["/home/tdrive/data", "/home/tdrive/cache"]
 
-ENTRYPOINT ["telegram-drive-server"]
+ENTRYPOINT ["docker-entrypoint-server.sh"]

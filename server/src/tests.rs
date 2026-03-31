@@ -1,6 +1,7 @@
+use actix_session::config::PersistentSession;
 use actix_session::storage::CookieSessionStore;
 use actix_session::SessionMiddleware;
-use actix_web::cookie::Key;
+use actix_web::cookie::{Key, SameSite};
 use actix_web::http::StatusCode;
 use actix_web::{test, web, App};
 use std::sync::Arc;
@@ -17,9 +18,12 @@ fn test_config(data_dir: &str) -> Config {
         host: "127.0.0.1".into(),
         port: 0,
         frontend_port: 3000,
+        cors_allowed_origin: "http://localhost:3000".into(),
         data_dir: data_dir.into(),
         cache_dir: format!("{}/cache", data_dir),
         session_secret: "test-secret-for-integration-tests".into(),
+        cookie_secure: false,
+        session_ttl_hours: 8,
         admin_password: "testpass".into(),
         telegram_api_id: 0,
         telegram_api_hash: String::new(),
@@ -58,7 +62,12 @@ macro_rules! test_app {
             CookieSessionStore::default(),
             $env.cookie_key.clone(),
         )
+        .cookie_http_only(true)
+        .cookie_same_site(SameSite::Strict)
         .cookie_secure(false)
+        .session_lifecycle(PersistentSession::default().session_ttl(
+            actix_web::cookie::time::Duration::hours(8),
+        ))
         .cookie_name("td_session".into())
         .build();
 
@@ -194,6 +203,18 @@ async fn login_correct_password_sets_cookie() {
         .cookies()
         .any(|c| c.name() == "td_session");
     assert!(has_cookie, "Session cookie td_session not set");
+
+    let set_cookie = resp
+        .response()
+        .headers()
+        .get(actix_web::http::header::SET_COOKIE)
+        .expect("Set-Cookie header missing")
+        .to_str()
+        .unwrap()
+        .to_string();
+
+    assert!(set_cookie.contains("HttpOnly"));
+    assert!(set_cookie.contains("SameSite=Strict"));
 }
 
 #[actix_web::test]

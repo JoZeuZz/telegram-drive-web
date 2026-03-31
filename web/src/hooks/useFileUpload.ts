@@ -4,6 +4,14 @@ import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { QueueItem } from '../types';
 
+function createQueueId(): string {
+    if (globalThis.crypto?.randomUUID) {
+        return globalThis.crypto.randomUUID();
+    }
+
+    return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
 export function useFileUpload(activeFolderId: number | null) {
     const queryClient = useQueryClient();
     const [uploadQueue, setUploadQueue] = useState<QueueItem[]>([]);
@@ -43,7 +51,7 @@ export function useFileUpload(activeFolderId: number | null) {
             const files = input.files;
             if (!files || files.length === 0) return;
             const newItems: QueueItem[] = Array.from(files).map((file) => ({
-                id: Math.random().toString(36).substr(2, 9),
+                id: createQueueId(),
                 file,
                 folderId: activeFolderId,
                 status: 'pending',
@@ -57,7 +65,7 @@ export function useFileUpload(activeFolderId: number | null) {
     // Handle drop from browser drag-and-drop
     const handleDrop = useCallback((files: FileList) => {
         const newItems: QueueItem[] = Array.from(files).map((file) => ({
-            id: Math.random().toString(36).substr(2, 9),
+            id: createQueueId(),
             file,
             folderId: activeFolderId,
             status: 'pending',

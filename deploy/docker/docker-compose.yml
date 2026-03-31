@@ -1,10 +1,8 @@
-version: "3.8"
-
 services:
   server:
     build:
-      context: ../../server
-      dockerfile: ../deploy/docker/Dockerfile.server
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile.server
     ports:
       - "8080:8080"
     volumes:
@@ -12,8 +10,18 @@ services:
     environment:
       - HOST=0.0.0.0
       - PORT=8080
+      - FRONTEND_PORT=${FRONTEND_PORT:-3000}
+      - CORS_ALLOWED_ORIGIN=${CORS_ALLOWED_ORIGIN:-http://localhost:3000}
       - DATA_DIR=/app/data
+      - CACHE_DIR=/app/data/cache
+      - COOKIE_SECURE=${COOKIE_SECURE:-false}
+      - SESSION_TTL_HOURS=${SESSION_TTL_HOURS:-8}
+      - SESSION_SECRET=${SESSION_SECRET:-changeme-dev-session-secret}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-changeme}
+      - TELEGRAM_API_ID=${TELEGRAM_API_ID:-0}
+      - TELEGRAM_API_HASH=${TELEGRAM_API_HASH:-}
       - RUST_LOG=info
+      - LOG_FORMAT=${LOG_FORMAT:-json}
     restart: unless-stopped
 
 volumes:

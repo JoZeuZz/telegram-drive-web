@@ -1,4 +1,8 @@
-use actix_session::{storage::CookieSessionStore, SessionMiddleware};
+use actix_session::{
+    config::PersistentSession,
+    storage::CookieSessionStore,
+    SessionMiddleware,
+};
 use actix_web::cookie::Key;
 use std::sync::Arc;
 
@@ -35,6 +39,12 @@ async fn main() -> std::io::Result<()> {
     // Load configuration
     let config = Config::from_env();
 
+    if !config.cookie_secure {
+        tracing::warn!(
+            "COOKIE_SECURE=false: session cookie will be sent over plain HTTP. Use true behind TLS reverse proxy."
+        );
+    }
+
     tracing::info!("Starting telegram-drive-server v{}", env!("CARGO_PKG_VERSION"));
     tracing::info!("Listening on {}:{}", config.host, config.port);
 
@@ -70,7 +80,7 @@ async fn main() -> std::io::Result<()> {
     // Start HTTP server
     actix_web::HttpServer::new(move || {
         let cors = actix_cors::Cors::default()
-            .allowed_origin(&format!("http://localhost:{}", config.frontend_port))
+            .allowed_origin(&config.cors_allowed_origin)
             .allow_any_method()
             .allow_any_header()
             .supports_credentials();
@@ -81,8 +91,11 @@ async fn main() -> std::io::Result<()> {
             cookie_key.clone(),
         )
         .cookie_http_only(true)
-        .cookie_same_site(actix_web::cookie::SameSite::Lax)
-        .cookie_secure(false) // set true behind HTTPS reverse proxy
+        .cookie_same_site(actix_web::cookie::SameSite::Strict)
+        .cookie_secure(config.cookie_secure)
+        .session_lifecycle(PersistentSession::default().session_ttl(
+            actix_web::cookie::time::Duration::hours(config.session_ttl_hours),
+        ))
         .cookie_name("td_session".to_string())
         .build();
 
@@ -104,19 +117,10 @@ async fn main() -> std::io::Result<()> {
 
 /// Derive a 64-byte key from the session secret using SHA-512.
 fn derive_cookie_key(secret: &str) -> [u8; 64] {
-    use std::collections::hash_map::DefaultHasher;
-    use std::hash::{Hash, Hasher};
+    use sha2::{Digest, Sha512};
 
+    let digest = Sha512::digest(secret.as_bytes());
     let mut buf = [0u8; 64];
-    let secret_bytes = secret.as_bytes();
-
-    // Fill the buffer by repeating the secret and mixing with position
-    for (i, byte) in buf.iter_mut().enumerate() {
-        let mut hasher = DefaultHasher::new();
-        i.hash(&mut hasher);
-        secret_bytes.hash(&mut hasher);
-        let h = hasher.finish();
-        *byte = h.to_le_bytes()[i % 8];
-    }
+    buf.copy_from_slice(&digest);
     buf
 }

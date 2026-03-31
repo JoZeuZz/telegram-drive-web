@@ -78,6 +78,14 @@ pub struct UploadQuery {
 #[derive(Deserialize)]
 pub struct CreateFolderRequest {
     pub name: String,
+    #[serde(default)]
+    pub parent_id: Option<i64>,
+}
+
+#[derive(Serialize)]
+pub struct DeleteFolderResponse {
+    pub success: bool,
+    pub deleted_count: usize,
 }
 
 // ─── Search ──────────────────────────────────────────────

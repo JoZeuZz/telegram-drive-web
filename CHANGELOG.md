@@ -1,5 +1,46 @@
 # Changelog
 
+## [Unreleased]
+
+### Security
+
+- Backend session cookie policy hardened to `SameSite=Strict` with configurable `COOKIE_SECURE` for TLS deployments.
+- Added configurable session TTL via `SESSION_TTL_HOURS` (default 8h) and propagated it to cookie max-age.
+- Replaced custom session key derivation with SHA-512-based derivation from `SESSION_SECRET`.
+- Frontend now keeps `api_hash` in `sessionStorage` (tab-scoped) instead of `localStorage`.
+
+### Tests
+
+- Extended backend integration tests to assert session cookie security attributes (`HttpOnly`, `SameSite=Strict`).
+
+### Docs
+
+- Updated session security docs to reflect cookie-session storage behavior and TTL configuration.
+- Updated deployment docs to use the single root `.env.example` contract across local, Coolify, and LXC workflows.
+- Added split deployment documentation for external Cloudflared tunnel in front of Coolify, using generic placeholders and no infra-specific data.
+
+### Deployment
+
+- Fixed Docker runtime env names to match backend config contract (`HOST`, `PORT`, `DATA_DIR`, `CACHE_DIR`).
+- Fixed Docker build context path mismatch in compose.
+- Added deploy-ready Coolify stack assets (`docker-compose.coolify.yml`, `Dockerfile.web`, nginx reverse-proxy config).
+- Added configurable `CORS_ALLOWED_ORIGIN` for production domains.
+- Added backend container entrypoint to create/chown mounted data dirs before dropping privileges, preventing first-boot volume permission failures.
+- Added Cloudflared deployment templates for split edge routing (Cloudflare tunnel to Coolify proxy).
+- Consolidated environment examples into a single root `.env.example` as the canonical cross-deployment contract.
+- Removed duplicate env templates under `server/` and `deploy/` to keep one canonical env contract for local, Coolify, and LXC workflows.
+
+### Changed
+
+- Unified previews and thumbnails under `CACHE_DIR/media` with folder-aware cache keys to prevent cross-folder collisions and simplify cleanup behavior.
+- Added centralized TanStack Query client defaults (`staleTime`, `gcTime`, retry policy, no window-focus refetch by default).
+- Made bandwidth polling visibility-aware to avoid background refetch traffic.
+- Switched upload queue item IDs to `crypto.randomUUID()` with timestamp fallback.
+- Added Vite `manualChunks` split for React/Query/Motion vendors to reduce main bundle size.
+- Improved multi-selection UX with Shift+click and Shift+Arrow range extension based on visible ordering.
+- Added progressive delete feedback (in-progress state, counters, action disabling, and toasts) for single and bulk deletes.
+- Added hierarchical folder UX and API behavior for `parent_id`, subtree-aware sync state, and cascade delete reporting (`deleted_count`).
+
 ## [1.0.4] - 2026-02-13
 
 ### Fixes

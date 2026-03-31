@@ -34,9 +34,9 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full design.
 
 ### Backend
 ```bash
+cp .env.example server/.env
 cd server
-cp .env.example .env
-# Edit .env with your settings
+# Edit .env with your settings (single env contract lives at repo root)
 cargo run
 ```
 
@@ -46,6 +46,16 @@ cd web
 npm install
 npm run dev
 ```
+
+## Deployment options
+
+- LXC/systemd + reverse proxy: see [docs/DEPLOYMENT_LXC.md](docs/DEPLOYMENT_LXC.md)
+- Coolify (Docker Compose stack): see [docs/DEPLOYMENT_COOLIFY.md](docs/DEPLOYMENT_COOLIFY.md)
+- Split topology (Coolify + external Cloudflared tunnel): see [docs/DEPLOYMENT_SPLIT_CLOUDFLARED.md](docs/DEPLOYMENT_SPLIT_CLOUDFLARED.md)
+
+When deploying behind a public domain, set `CORS_ALLOWED_ORIGIN` to your final URL (for example `https://drive.example.com`).
+
+Never commit real secrets or private infrastructure details. Keep runtime values only in your deployment platform secret manager/UI.
 
 The frontend dev server runs on `http://localhost:3000` and proxies API calls to `http://localhost:8080`.
 

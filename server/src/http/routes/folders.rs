@@ -18,7 +18,7 @@ async fn create_folder(
     body: web::Json<CreateFolderRequest>,
     state: web::Data<AppState>,
 ) -> Result<HttpResponse, AppError> {
-    let folder = telegram_folders::create_folder(&state, &body.name).await?;
+    let folder = telegram_folders::create_folder(&state, &body.name, body.parent_id).await?;
     Ok(HttpResponse::Created().json(folder))
 }
 
@@ -29,8 +29,11 @@ async fn delete_folder(
     state: web::Data<AppState>,
 ) -> Result<HttpResponse, AppError> {
     let folder_id = path.into_inner();
-    telegram_folders::delete_folder(&state, folder_id).await?;
-    Ok(HttpResponse::Ok().json(SuccessResponse { success: true }))
+    let deleted_count = telegram_folders::delete_folder(&state, folder_id).await?;
+    Ok(HttpResponse::Ok().json(DeleteFolderResponse {
+        success: true,
+        deleted_count,
+    }))
 }
 
 /// POST /api/folders/sync — force rescan of Telegram folders.

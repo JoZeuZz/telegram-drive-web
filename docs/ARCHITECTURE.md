@@ -48,11 +48,13 @@ Infrastructure configs for systemd, nginx, caddy, and docker.
 
 1. **Single server process** — Actix-Web serves both the API and (in production) the static frontend files.
 2. **No Tauri** — All desktop dependencies are removed. Communication is over HTTP, not IPC.
-3. **SQLite for persistence** — App state, user sessions, and metadata cache live in a single SQLite database.
+3. **SQLite for persistence** — Telegram session storage uses SQLite (`grammers`), while app auth session state is cookie-based.
 4. **Telegram session on disk** — `grammers` SQLite session file is stored in `DATA_DIR/`.
 5. **Cookie-based auth** — HttpOnly, Secure, SameSite=Strict cookies for session management.
 6. **Backend upload queue** — Uploads are queued and processed server-side, not in the browser.
 7. **Streaming through the server** — Media is streamed from Telegram through the Actix server to the browser.
+8. **Virtual folder hierarchy** — Subfolders are modeled as independent Telegram channels with parent metadata managed by the app (`parent_id`), instead of relying on Telegram-native nested folders.
+9. **Unified media cache** — Previews and thumbnails are stored under the same cache root (`CACHE_DIR/media`) to simplify cleanup and avoid key collisions.
 
 ## Data flow examples
 
@@ -74,3 +76,32 @@ Browser → GET /api/media/stream/:folderId/:messageId
 ## Security model
 
 See [SECURITY.md](SECURITY.md) for the full security design.
+
+## Deployment topologies
+
+### Standard (single platform)
+
+- Reverse proxy and app stack run in the same platform (LXC or Coolify-managed Docker).
+- Public domain terminates TLS at the platform edge.
+
+### Split edge topology (Cloudflared + Coolify)
+
+```
+┌─────────────┐      HTTPS      ┌──────────────────┐      Tunnel      ┌─────────────────────┐
+│   Browser   │ ─────────────► │ Cloudflare Edge  │ ───────────────► │ Cloudflared Agent   │
+└─────────────┘                 └──────────────────┘                  └─────────┬───────────┘
+                                                                                │
+                                                                                │ HTTP/HTTPS (private network)
+                                                                                ▼
+                                                                      ┌─────────────────────┐
+                                                                      │ Coolify / Traefik   │
+                                                                      │ Host-based routing  │
+                                                                      └─────────┬───────────┘
+                                                                                ▼
+                                                                      ┌─────────────────────┐
+                                                                      │ telegram-drive-web  │
+                                                                      │ web + server        │
+                                                                      └─────────────────────┘
+```
+
+Key rule: Cloudflared must forward the public hostname to Coolify (host header), and backend CORS must match that same public URL.

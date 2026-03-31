@@ -8,6 +8,8 @@ interface TopBarProps {
     onBulkDownload: () => void;
     onBulkDelete: () => void;
     onDownloadFolder: () => void;
+    isDeleting: boolean;
+    deleteProgress: { done: number; total: number };
     viewMode: 'grid' | 'list';
     setViewMode: (mode: 'grid' | 'list') => void;
     searchTerm: string;
@@ -16,7 +18,7 @@ interface TopBarProps {
 
 export function TopBar({
     currentFolderName, selectedIds, onShowMoveModal, onBulkDownload, onBulkDelete,
-    onDownloadFolder, viewMode, setViewMode, searchTerm, onSearchChange
+    onDownloadFolder, isDeleting, deleteProgress, viewMode, setViewMode, searchTerm, onSearchChange
 }: TopBarProps) {
     const { theme, toggleTheme } = useTheme();
 
@@ -41,12 +43,18 @@ export function TopBar({
             </div>
 
             <div className="flex items-center gap-2">
+                {isDeleting && (
+                    <div className="mr-4 px-3 py-1.5 rounded-md bg-red-500/10 border border-red-500/20 text-red-300 text-xs">
+                        Deleting {deleteProgress.done}/{deleteProgress.total}
+                    </div>
+                )}
+
                 {selectedIds.length > 0 && (
                     <div className="flex items-center gap-2 mr-4 animate-in fade-in slide-in-from-top-2">
                         <span className="text-xs text-telegram-subtext mr-2">{selectedIds.length} Selected</span>
-                        <button onClick={onShowMoveModal} className="px-3 py-1.5 bg-telegram-primary/20 hover:bg-telegram-primary/30 text-telegram-primary rounded-md text-xs transition font-medium">Move to...</button>
-                        <button onClick={onBulkDownload} className="px-3 py-1.5 bg-telegram-hover hover:bg-telegram-border rounded-md text-xs text-telegram-text transition">Download Selected</button>
-                        <button onClick={onBulkDelete} className="px-3 py-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-md text-xs transition">Delete</button>
+                        <button disabled={isDeleting} onClick={onShowMoveModal} className="px-3 py-1.5 bg-telegram-primary/20 hover:bg-telegram-primary/30 text-telegram-primary rounded-md text-xs transition font-medium disabled:opacity-50 disabled:cursor-not-allowed">Move to...</button>
+                        <button disabled={isDeleting} onClick={onBulkDownload} className="px-3 py-1.5 bg-telegram-hover hover:bg-telegram-border rounded-md text-xs text-telegram-text transition disabled:opacity-50 disabled:cursor-not-allowed">Download Selected</button>
+                        <button disabled={isDeleting} onClick={onBulkDelete} className="px-3 py-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-md text-xs transition disabled:opacity-50 disabled:cursor-not-allowed">{isDeleting ? 'Deleting...' : 'Delete'}</button>
                     </div>
                 )}
 

@@ -21,8 +21,8 @@ docs/       Architecture & API docs
 
 ```bash
 # Backend
+cp .env.example server/.env       # edit with your Telegram creds
 cd server
-cp .env.example .env       # edit with your Telegram creds
 cargo build
 cargo test
 

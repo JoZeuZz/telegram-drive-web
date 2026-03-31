@@ -5,8 +5,9 @@ import { FileTypeIcon } from '../FileTypeIcon';
 
 interface FileListItemProps {
     file: TelegramFile;
+    orderedIds: number[];
     selectedIds: number[];
-    onFileClick: (e: React.MouseEvent, id: number) => void;
+    onFileClick: (e: React.MouseEvent, id: number, orderedIds: number[]) => void;
     handleContextMenu: (e: React.MouseEvent, file: TelegramFile) => void;
     onDragStart?: (fileId: number) => void;
     onDragEnd?: () => void;
@@ -17,7 +18,7 @@ interface FileListItemProps {
 }
 
 export function FileListItem({
-    file, selectedIds, onFileClick, handleContextMenu,
+    file, orderedIds, selectedIds, onFileClick, handleContextMenu,
     onDragStart, onDragEnd, onDrop,
     onPreview, onDownload, onDelete
 }: FileListItemProps) {
@@ -26,7 +27,7 @@ export function FileListItem({
 
     return (
         <div
-            onClick={(e) => onFileClick(e, file.id)}
+            onClick={(e) => onFileClick(e, file.id, orderedIds)}
             onContextMenu={(e) => handleContextMenu(e, file)}
             draggable
             onDragStart={(e) => {

@@ -1,0 +1,25 @@
+# VCS
+.git
+.gitignore
+
+# Build artifacts
+**/target
+**/dist
+
+# Node
+**/node_modules
+npm-debug.log*
+
+# Env and local runtime
+.env
+.env.*
+
+# IDE / editor
+.vscode
+.idea
+
+# Serena
+**/.serena
+
+# Misc
+screenshots

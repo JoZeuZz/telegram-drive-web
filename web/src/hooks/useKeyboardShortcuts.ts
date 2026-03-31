@@ -6,6 +6,7 @@ interface UseKeyboardShortcutsProps {
     onEscape: () => void;
     onSearch: () => void;
     onEnter?: () => void;
+    onExtendSelection?: (direction: 'up' | 'down') => void;
     enabled?: boolean;
 }
 
@@ -15,6 +16,7 @@ export function useKeyboardShortcuts({
     onEscape,
     onSearch,
     onEnter,
+    onExtendSelection,
     enabled = true
 }: UseKeyboardShortcutsProps) {
 
@@ -55,6 +57,13 @@ export function useKeyboardShortcuts({
             return;
         }
 
+        // Shift + Arrow - Extend selection range
+        if (e.shiftKey && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
+            e.preventDefault();
+            onExtendSelection?.(e.key === 'ArrowDown' ? 'down' : 'up');
+            return;
+        }
+
         // Escape - Clear selection
         if (e.key === 'Escape') {
             e.preventDefault();
@@ -67,7 +76,7 @@ export function useKeyboardShortcuts({
             onEnter?.();
             return;
         }
-    }, [enabled, onSelectAll, onDelete, onEscape, onSearch, onEnter]);
+    }, [enabled, onSelectAll, onDelete, onEscape, onSearch, onEnter, onExtendSelection]);
 
     useEffect(() => {
         window.addEventListener('keydown', handleKeyDown);

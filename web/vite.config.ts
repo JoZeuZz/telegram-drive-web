@@ -17,5 +17,14 @@ export default defineConfig({
   },
   build: {
     outDir: "dist",
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          "react-vendor": ["react", "react-dom", "react/jsx-runtime"],
+          "query-vendor": ["@tanstack/react-query"],
+          "motion-vendor": ["framer-motion"],
+        },
+      },
+    },
   },
 });

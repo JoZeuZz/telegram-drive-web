@@ -8,6 +8,13 @@ use crate::services::helpers::resolve_peer;
 
 const PREVIEW_CACHE_MAX_FILES: usize = 30;
 const PREVIEW_CACHE_MAX_TOTAL_BYTES: u64 = 80 * 1024 * 1024;
+const MEDIA_CACHE_SUBDIR: &str = "media";
+
+fn folder_cache_key(folder_id: Option<i64>) -> String {
+    folder_id
+        .map(|id| id.to_string())
+        .unwrap_or_else(|| "home".to_string())
+}
 
 /// Prune the preview cache directory: keep at most 30 files / 80 MB.
 fn prune_preview_cache(cache_dir: &std::path::Path) {
@@ -52,7 +59,7 @@ pub async fn get_preview(
     message_id: i32,
     folder_id: Option<i64>,
 ) -> Result<String, AppError> {
-    let cache_dir_path = std::path::Path::new(&state.cache_dir).join("previews");
+    let cache_dir_path = std::path::Path::new(&state.cache_dir).join(MEDIA_CACHE_SUBDIR);
     if !cache_dir_path.exists() {
         let _ = std::fs::create_dir_all(&cache_dir_path);
     }
@@ -85,9 +92,7 @@ pub async fn get_preview(
     if let Some(msg) = target_message {
         if let Some(media) = msg.media() {
             let ext = media_extension(&media);
-            let folder_key = folder_id
-                .map(|id| id.to_string())
-                .unwrap_or_else(|| "home".to_string());
+            let folder_key = folder_cache_key(folder_id);
             let save_path = cache_dir_path.join(format!("{}_{}.{}", folder_key, message_id, ext));
             let save_path_str = save_path.to_string_lossy().to_string();
 
@@ -144,7 +149,7 @@ pub async fn get_preview(
 
 /// Clean the entire preview cache.
 pub fn clean_cache(cache_dir: &str) -> Result<(), AppError> {
-    let preview_dir = std::path::Path::new(cache_dir).join("previews");
+    let preview_dir = std::path::Path::new(cache_dir).join(MEDIA_CACHE_SUBDIR);
     if preview_dir.exists() {
         let _ = std::fs::remove_dir_all(preview_dir);
     }
@@ -158,16 +163,19 @@ pub async fn get_thumbnail(
     message_id: i32,
     folder_id: Option<i64>,
 ) -> Result<String, AppError> {
-    let cache_dir_path = std::path::Path::new(&state.data_dir).join("thumbnails");
+    let cache_dir_path = std::path::Path::new(&state.cache_dir).join(MEDIA_CACHE_SUBDIR);
     if !cache_dir_path.exists() {
         let _ = std::fs::create_dir_all(&cache_dir_path);
     }
+
+    let folder_key = folder_cache_key(folder_id);
+    let file_prefix = format!("{}_{}.", folder_key, message_id);
 
     // Check for cached thumbnail
     if let Ok(entries) = std::fs::read_dir(&cache_dir_path) {
         for entry in entries.flatten() {
             let name = entry.file_name().to_string_lossy().to_string();
-            if name.starts_with(&format!("{}.", message_id)) {
+            if name.starts_with(&file_prefix) {
                 if let Ok(bytes) = std::fs::read(entry.path()) {
                     let ext = name.rsplit('.').next().unwrap_or("jpg");
                     let mime = mime_from_ext(ext);
@@ -218,7 +226,8 @@ pub async fn get_thumbnail(
                 };
 
                 if is_image {
-                    let save_path = cache_dir_path.join(format!("{}.{}", message_id, ext));
+                    let save_path =
+                        cache_dir_path.join(format!("{}_{}.{}", folder_key, message_id, ext));
                     let save_path_str = save_path.to_string_lossy().to_string();
 
                     if client.download_media(&media, &save_path_str).await.is_ok() {

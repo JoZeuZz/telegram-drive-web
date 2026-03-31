@@ -2,6 +2,8 @@
 
 Production deployment guide for running telegram-drive-web in an **unprivileged LXC container** on Proxmox VE, accessed through a VPN or reverse proxy.
 
+If you run Cloudflared in a separate node and route traffic through Coolify/Traefik, use the split deployment guide: [DEPLOYMENT_SPLIT_CLOUDFLARED.md](DEPLOYMENT_SPLIT_CLOUDFLARED.md).
+
 ## Prerequisites
 
 | Requirement | Minimum |
@@ -88,7 +90,7 @@ cd ..
 ## 5. Configure environment
 
 ```bash
-cp deploy/systemd/telegram-drive-web.env /opt/telegram-drive-web/.env
+cp .env.example /opt/telegram-drive-web/.env
 chmod 600 /opt/telegram-drive-web/.env
 ```
 
@@ -98,10 +100,13 @@ Edit `/opt/telegram-drive-web/.env`:
 HOST=127.0.0.1
 PORT=8080
 FRONTEND_PORT=80
+CORS_ALLOWED_ORIGIN=https://telegram-drive.example.com
 DATA_DIR=/opt/telegram-drive-web/data
 CACHE_DIR=/opt/telegram-drive-web/data/cache
 RUST_LOG=info
 LOG_FORMAT=json
+COOKIE_SECURE=true
+SESSION_TTL_HOURS=8
 
 # REQUIRED — generate with: openssl rand -hex 32
 SESSION_SECRET=<your-secret>

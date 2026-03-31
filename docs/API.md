@@ -211,10 +211,11 @@ List all Telegram Drive folders (channels with `[TD]` tag).
 ### `POST /api/folders`
 
 Create a new folder (private channel).
+If `parent_id` is set, the folder is created as a subfolder of that parent in the app hierarchy.
 
 **Body**
 ```json
-{ "name": "My Folder" }
+{ "name": "My Folder", "parent_id": null }
 ```
 
 **Response** `201`
@@ -224,11 +225,11 @@ Create a new folder (private channel).
 
 ### `DELETE /api/folders/{folder_id}`
 
-Delete a folder (channel).
+Delete a folder branch in cascade order (children first, then parent).
 
 **Response** `200`
 ```json
-{ "success": true }
+{ "success": true, "deleted_count": 3 }
 ```
 
 ---

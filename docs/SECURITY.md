@@ -15,13 +15,15 @@ This application is designed for **single-user, homelab deployment behind a VPN*
 - The app has its own login system independent of Telegram
 - On first run, a bootstrap flow creates the admin user
 - Passwords are hashed with **argon2** (not bcrypt, not plain SHA)
-- Sessions use **HttpOnly, Secure, SameSite=Strict** cookies
-- Session tokens are stored server-side in SQLite
+- Sessions use **HttpOnly, SameSite=Strict** cookies, with `COOKIE_SECURE=true` recommended behind TLS
+- Session state is stored using cookie-based sessions (`CookieSessionStore`), not in SQLite
+- Session TTL is controlled via `SESSION_TTL_HOURS` (default: 8h)
 - No JWT — stateful sessions are simpler and revocable
 
 ### Telegram auth
 - Telegram API credentials (api_id, api_hash) are stored server-side in `.env`
 - The Telegram session file is stored on disk, never sent to the browser
+- During login setup, `api_hash` is kept in browser `sessionStorage` (tab-scoped), not long-lived local storage
 - The Telegram auth flow (phone → code → 2FA) happens over the app's authenticated API
 
 ## Transport security
@@ -55,3 +57,17 @@ This application is designed for **single-user, homelab deployment behind a VPN*
 - `NoNewPrivileges=true`, `ProtectSystem=strict`, `ProtectHome=true`
 - Container should have no unnecessary capabilities
 - Reverse proxy enforces upload size limits
+
+## Secret hygiene and documentation policy
+
+- Never commit real values for `SESSION_SECRET`, `ADMIN_PASSWORD`, `TELEGRAM_API_HASH`, tunnel credentials, or API keys.
+- Never commit private infrastructure details (private IPs, internal hostnames, VPN topology, node inventory).
+- Use placeholders in docs and examples (`example.com`, `<your-secret>`, `***REDACTED***`).
+- Store runtime secrets only in deployment secret managers (Coolify environment UI, Cloudflare Zero Trust, system secret stores).
+- If any secret is exposed in git history, rotate it immediately and replace all affected credentials.
+
+## Split topology notes (Coolify + Cloudflared)
+
+- Keep Cloudflared as edge ingress and Coolify/Traefik as application ingress.
+- Preserve the public `Host` header from Cloudflared to Coolify so host-based routing resolves the correct app.
+- Keep `CORS_ALLOWED_ORIGIN` equal to the final public URL served to users.

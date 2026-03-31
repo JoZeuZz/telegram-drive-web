@@ -4,6 +4,7 @@ import { toast } from 'sonner';
 import { useConfirm } from '../context/ConfirmContext';
 import { TelegramFile } from '../types';
 import { downloadFileUrl } from '../lib/api';
+import { useState } from 'react';
 
 export function useFileOperations(
     activeFolderId: number | null,
@@ -13,24 +14,54 @@ export function useFileOperations(
 ) {
     const queryClient = useQueryClient();
     const { confirm } = useConfirm();
+    const [isDeleting, setIsDeleting] = useState(false);
+    const [deleteProgress, setDeleteProgress] = useState({ done: 0, total: 0 });
 
     const handleDelete = async (id: number) => {
+        if (isDeleting) {
+            toast.info("A delete operation is already in progress.");
+            return;
+        }
+
         if (!await confirm({ title: "Delete File", message: "Are you sure you want to delete this file?", confirmText: "Delete", variant: 'danger' })) return;
+
+        const toastId = `delete-single-${id}`;
+        setIsDeleting(true);
+        setDeleteProgress({ done: 0, total: 1 });
+        toast.loading("Deleting file...", { id: toastId });
+
         try {
             await api.deleteFile(id, activeFolderId);
+            setDeleteProgress({ done: 1, total: 1 });
             queryClient.invalidateQueries({ queryKey: ['files', activeFolderId] });
-            toast.success("File deleted");
+            toast.success("File deleted", { id: toastId });
         } catch (e) {
-            toast.error(`Delete failed: ${e}`);
+            toast.error(`Delete failed: ${e}`, { id: toastId });
+        } finally {
+            setIsDeleting(false);
+            setDeleteProgress({ done: 0, total: 0 });
         }
     }
 
     const handleBulkDelete = async () => {
+        if (isDeleting) {
+            toast.info("A delete operation is already in progress.");
+            return;
+        }
+
         if (selectedIds.length === 0) return;
         if (!await confirm({ title: "Delete Files", message: `Are you sure you want to delete ${selectedIds.length} files?`, confirmText: "Delete All", variant: 'danger' })) return;
 
+        const total = selectedIds.length;
+        const toastId = 'delete-bulk-progress';
+        setIsDeleting(true);
+        setDeleteProgress({ done: 0, total });
+        toast.loading(`Deleting files... (0/${total})`, { id: toastId });
+
         let success = 0;
         let fail = 0;
+        let processed = 0;
+
         for (const id of selectedIds) {
             try {
                 await api.deleteFile(id, activeFolderId);
@@ -38,11 +69,25 @@ export function useFileOperations(
             } catch {
                 fail++;
             }
+
+            processed++;
+            setDeleteProgress({ done: processed, total });
+            toast.loading(`Deleting files... (${processed}/${total})`, { id: toastId });
         }
+
         setSelectedIds([]);
         queryClient.invalidateQueries({ queryKey: ['files', activeFolderId] });
-        if (success > 0) toast.success(`Deleted ${success} files.`);
-        if (fail > 0) toast.error(`Failed to delete ${fail} files.`);
+
+        if (fail === 0) {
+            toast.success(`Deleted ${success} files.`, { id: toastId });
+        } else if (success === 0) {
+            toast.error(`Failed to delete ${fail} files.`, { id: toastId });
+        } else {
+            toast.warning(`Deleted ${success} files, failed ${fail}.`, { id: toastId });
+        }
+
+        setIsDeleting(false);
+        setDeleteProgress({ done: 0, total: 0 });
     }
 
     /** Trigger a browser download via a hidden <a> tag */
@@ -110,6 +155,8 @@ export function useFileOperations(
         handleBulkDownload,
         handleBulkMove,
         handleDownloadFolder,
+        isDeleting,
+        deleteProgress,
         handleGlobalSearch: async (query: string) => {
             try {
                 return await api.searchFiles(query);

@@ -19,6 +19,48 @@ function lsSet(key: string, value: unknown) {
     localStorage.setItem(key, JSON.stringify(value));
 }
 
+function normalizeFolders(list: TelegramFolder[]): TelegramFolder[] {
+    return list.map((folder) => ({
+        ...folder,
+        parent_id: folder.parent_id ?? null,
+    }));
+}
+
+function buildChildrenMap(folders: TelegramFolder[]): Map<number, number[]> {
+    const map = new Map<number, number[]>();
+
+    for (const folder of folders) {
+        const parentId = folder.parent_id ?? null;
+        if (parentId === null || parentId === folder.id) continue;
+
+        const children = map.get(parentId) ?? [];
+        children.push(folder.id);
+        map.set(parentId, children);
+    }
+
+    return map;
+}
+
+function collectBranchIds(folders: TelegramFolder[], rootId: number): Set<number> {
+    const childrenMap = buildChildrenMap(folders);
+    const branchIds = new Set<number>();
+    const stack = [rootId];
+
+    while (stack.length > 0) {
+        const currentId = stack.pop();
+        if (currentId === undefined || branchIds.has(currentId)) continue;
+
+        branchIds.add(currentId);
+
+        const children = childrenMap.get(currentId) ?? [];
+        for (const childId of children) {
+            stack.push(childId);
+        }
+    }
+
+    return branchIds;
+}
+
 export function useTelegramConnection(onLogoutParent: () => void) {
     const queryClient = useQueryClient();
     const { confirm } = useConfirm();
@@ -36,7 +78,7 @@ export function useTelegramConnection(onLogoutParent: () => void) {
     useEffect(() => {
         const init = async () => {
             const savedFolders = lsGet<TelegramFolder[]>('folders');
-            if (savedFolders) setFolders(savedFolders);
+            if (savedFolders) setFolders(normalizeFolders(savedFolders));
 
             const savedActive = lsGet<number | null>('activeFolderId');
             if (savedActive !== null && savedActive !== undefined) setActiveFolderId(savedActive);
@@ -71,7 +113,7 @@ export function useTelegramConnection(onLogoutParent: () => void) {
         try {
             await api.telegramLogout().catch(() => { });
             localStorage.removeItem('api_id');
-            localStorage.removeItem('api_hash');
+            sessionStorage.removeItem('api_hash');
             localStorage.removeItem('folders');
         } catch {
             // best effort cleanup
@@ -87,7 +129,7 @@ export function useTelegramConnection(onLogoutParent: () => void) {
         try {
             await api.telegramLogout();
             localStorage.removeItem('api_id');
-            localStorage.removeItem('api_hash');
+            sessionStorage.removeItem('api_hash');
             localStorage.removeItem('folders');
             onLogoutParent();
         } catch {
@@ -99,21 +141,43 @@ export function useTelegramConnection(onLogoutParent: () => void) {
     const handleSyncFolders = async () => {
         setIsSyncing(true);
         try {
-            const foundFolders = await api.listFolders();
-            const merged = [...folders];
+            const foundFolders = normalizeFolders(await api.listFolders());
+            const oldById = new Map(folders.map((f) => [f.id, f]));
+
             let added = 0;
-            for (const f of foundFolders) {
-                if (!merged.find(existing => existing.id === f.id)) {
-                    merged.push(f);
+            let updated = 0;
+            let removed = 0;
+
+            for (const folder of foundFolders) {
+                const existing = oldById.get(folder.id);
+                if (!existing) {
                     added++;
+                    continue;
+                }
+
+                if (existing.name !== folder.name || (existing.parent_id ?? null) !== (folder.parent_id ?? null)) {
+                    updated++;
                 }
             }
-            if (added > 0) {
-                setFolders(merged);
-                lsSet('folders', merged);
-                toast.success(`Scan complete. Found ${added} new folders.`);
+
+            for (const oldFolder of folders) {
+                if (!foundFolders.some((f) => f.id === oldFolder.id)) {
+                    removed++;
+                }
+            }
+
+            setFolders(foundFolders);
+            lsSet('folders', foundFolders);
+
+            if (activeFolderId !== null && !foundFolders.some((f) => f.id === activeFolderId)) {
+                setActiveFolderId(null);
+                lsSet('activeFolderId', null);
+            }
+
+            if (added > 0 || updated > 0 || removed > 0) {
+                toast.success(`Sync complete. +${added} new, ~${updated} updated, -${removed} removed.`);
             } else {
-                toast.info("Scan complete. No new folders found.");
+                toast.info('Sync complete. No folder changes found.');
             }
         } catch {
             toast.error("Sync failed");
@@ -122,13 +186,23 @@ export function useTelegramConnection(onLogoutParent: () => void) {
         }
     };
 
-    const handleCreateFolder = async (name: string) => {
+    const handleCreateFolder = async (name: string, parentId: number | null = null) => {
         try {
-            const newFolder = await api.createFolder(name);
-            const updated = [...folders, newFolder];
+            const created = await api.createFolder(name, parentId);
+            const newFolder = { ...created, parent_id: created.parent_id ?? null };
+            const exists = folders.some((folder) => folder.id === newFolder.id);
+            const updated = exists
+                ? folders.map((folder) => (folder.id === newFolder.id ? newFolder : folder))
+                : [...folders, newFolder];
+
             setFolders(updated);
             lsSet('folders', updated);
-            toast.success(`Folder "${name}" created.`);
+
+            if (parentId === null) {
+                toast.success(`Folder "${name}" created.`);
+            } else {
+                toast.success(`Subfolder "${name}" created.`);
+            }
         } catch (e) {
             toast.error("Failed to create folder: " + e);
             throw e;
@@ -136,20 +210,37 @@ export function useTelegramConnection(onLogoutParent: () => void) {
     };
 
     const handleFolderDelete = async (folderId: number, folderName: string) => {
+        const branchIds = collectBranchIds(folders, folderId);
+        const descendants = Math.max(0, branchIds.size - 1);
+
         if (!await confirm({
             title: "Delete Folder",
-            message: `Are you sure you want to delete "${folderName}"?\nThis will delete the channel on Telegram.`,
+            message: descendants > 0
+                ? `Are you sure you want to delete "${folderName}"?\nThis will delete this folder and ${descendants} subfolder(s) on Telegram.`
+                : `Are you sure you want to delete "${folderName}"?\nThis will delete the channel on Telegram.`,
             confirmText: "Delete",
             variant: 'danger'
         })) return;
 
         try {
-            await api.deleteFolder(folderId);
-            const updated = folders.filter(f => f.id !== folderId);
+            const res = await api.deleteFolder(folderId);
+
+            let updated: TelegramFolder[] = [];
+            try {
+                updated = normalizeFolders(await api.listFolders());
+            } catch {
+                updated = folders.filter((folder) => !branchIds.has(folder.id));
+            }
+
             setFolders(updated);
             lsSet('folders', updated);
-            if (activeFolderId === folderId) setActiveFolderId(null);
-            toast.success(`Folder "${folderName}" deleted.`);
+            if (activeFolderId !== null && !updated.some((f) => f.id === activeFolderId)) {
+                setActiveFolderId(null);
+                lsSet('activeFolderId', null);
+            }
+
+            const deletedCount = Math.max(1, res.deleted_count ?? 1);
+            toast.success(`Deleted ${deletedCount} folder(s), including "${folderName}".`);
         } catch (e: unknown) {
             const errStr = String(e);
             if (errStr.includes("not found")) {
@@ -159,10 +250,13 @@ export function useTelegramConnection(onLogoutParent: () => void) {
                     confirmText: "Remove",
                     variant: 'info'
                 })) {
-                    const updated = folders.filter(f => f.id !== folderId);
+                    const updated = folders.filter((folder) => !branchIds.has(folder.id));
                     setFolders(updated);
                     lsSet('folders', updated);
-                    if (activeFolderId === folderId) setActiveFolderId(null);
+                    if (activeFolderId !== null && !updated.some((f) => f.id === activeFolderId)) {
+                        setActiveFolderId(null);
+                        lsSet('activeFolderId', null);
+                    }
                 }
             } else {
                 toast.error(`Failed to delete folder: ${e}`);

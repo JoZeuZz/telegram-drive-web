@@ -3,6 +3,8 @@ node_modules/
 dist/
 .DS_Store
 .env
+.env.*
+!.env.example
 
 # Rust
 target/
@@ -31,3 +33,7 @@ Error.html
 *.exe
 *.AppImage
 *.deb
+
+
+.serena/
+**/.serena/

@@ -211,11 +211,11 @@ export const downloadFileUrl = (
 
 export const listFolders = () => request<TelegramFolder[]>("/folders");
 
-export const createFolder = (name: string) =>
-  request<TelegramFolder>("/folders", json({ name }));
+export const createFolder = (name: string, parentId: number | null = null) =>
+  request<TelegramFolder>("/folders", json({ name, parent_id: parentId }));
 
 export const deleteFolder = (folderId: number) =>
-  request<{ success: boolean }>(`/folders/${folderId}`, {
+  request<{ success: boolean; deleted_count: number }>(`/folders/${folderId}`, {
     method: "DELETE",
   });
 
