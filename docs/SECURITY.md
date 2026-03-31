@@ -19,6 +19,9 @@ This application is designed for **single-user, homelab deployment behind a VPN*
 - Session state is stored using cookie-based sessions (`CookieSessionStore`), not in SQLite
 - Session TTL is controlled via `SESSION_TTL_HOURS` (default: 8h)
 - No JWT — stateful sessions are simpler and revocable
+- Environment policy:
+  - `APP_ENV=development` allows local defaults but logs warnings for weak settings
+  - `APP_ENV=production` enforces fail-fast validation at startup for weak/unsafe values
 
 ### Telegram auth
 - Telegram API credentials (api_id, api_hash) are stored server-side in `.env`
@@ -31,6 +34,7 @@ This application is designed for **single-user, homelab deployment behind a VPN*
 - All traffic should go through a reverse proxy with TLS (nginx/caddy)
 - CORS is restricted to the frontend origin
 - No sensitive data in URL query parameters
+- In production, `CORS_ALLOWED_ORIGIN` must be an HTTPS public origin
 
 ## Data protection
 
@@ -44,6 +48,8 @@ This application is designed for **single-user, homelab deployment behind a VPN*
 - Login endpoint: limited to prevent brute force
 - Telegram-proxied endpoints: respect FLOOD_WAIT errors from Telegram
 - Upload/download: configurable concurrency limits
+- Current limiter is in-memory and single-instance scoped (not distributed)
+- `TRUST_PROXY_HEADERS` controls whether `X-Forwarded-For` is trusted for limiter key extraction
 
 ## Input validation
 
@@ -57,6 +63,10 @@ This application is designed for **single-user, homelab deployment behind a VPN*
 - `NoNewPrivileges=true`, `ProtectSystem=strict`, `ProtectHome=true`
 - Container should have no unnecessary capabilities
 - Reverse proxy enforces upload size limits
+- Production must set:
+  - `APP_ENV=production`
+  - `COOKIE_SECURE=true`
+  - strong `SESSION_SECRET` and `ADMIN_PASSWORD`
 
 ## Secret hygiene and documentation policy
 

@@ -18,15 +18,20 @@ This guide deploys Telegram Drive as a **Docker Compose stack** in Coolify using
 
 Set these in Coolify (use the single contract in `.env.example` as reference):
 
+- `APP_ENV=production`
 - `CORS_ALLOWED_ORIGIN` (example: `https://drive.example.com`)
+- `COOKIE_SECURE=true`
 - `SESSION_SECRET`
 - `ADMIN_PASSWORD`
+- `TRUST_PROXY_HEADERS=true` (recommended behind proxy/tunnel)
 - `TELEGRAM_API_ID`
 - `TELEGRAM_API_HASH`
 
 Optional:
 
 - `SESSION_TTL_HOURS` (default `8`)
+- `APP_AUTH_RATE_LIMIT_MAX_REQUESTS`, `APP_AUTH_RATE_LIMIT_WINDOW_SECS`
+- `TELEGRAM_AUTH_RATE_LIMIT_MAX_REQUESTS`, `TELEGRAM_AUTH_RATE_LIMIT_WINDOW_SECS`
 - `RUST_LOG` (default `info`)
 - `LOG_FORMAT` (default `json`)
 

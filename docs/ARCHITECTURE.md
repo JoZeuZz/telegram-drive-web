@@ -46,7 +46,7 @@ Infrastructure configs for systemd, nginx, caddy, and docker.
 
 ## Key design decisions
 
-1. **Single server process** — Actix-Web serves both the API and (in production) the static frontend files.
+1. **Split serving in production** — Actix-Web serves the API, while static frontend assets are served by the edge layer (nginx/caddy/web container).
 2. **No Tauri** — All desktop dependencies are removed. Communication is over HTTP, not IPC.
 3. **SQLite for persistence** — Telegram session storage uses SQLite (`grammers`), while app auth session state is cookie-based.
 4. **Telegram session on disk** — `grammers` SQLite session file is stored in `DATA_DIR/`.

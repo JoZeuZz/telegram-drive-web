@@ -3,6 +3,9 @@
 Base URL: `http://<host>:<port>/api`
 
 All protected endpoints require a valid session cookie (`td_session`), obtained via `/api/app-auth/login`.
+All mutating endpoints (`POST`, `PUT`, `PATCH`, `DELETE`) also require:
+
+`X-Requested-With: XMLHttpRequest`
 
 ---
 
@@ -62,6 +65,20 @@ Check current authentication state.
 **Response** `200`
 ```json
 { "authenticated": true }
+```
+
+### `POST /api/app-auth/bootstrap` *(protected)*
+
+Change the app admin password.
+
+**Body**
+```json
+{ "current_password": "old-pass", "new_password": "new-strong-pass" }
+```
+
+**Response** `200`
+```json
+{ "success": true }
 ```
 
 ---
@@ -311,6 +328,39 @@ Remove completed/failed/cancelled entries.
 **Response** `200`
 ```json
 { "removed": 5 }
+```
+
+---
+
+## Admin *(protected)*
+
+### `POST /api/admin/clean-cache`
+
+Trigger cache cleanup manually.
+
+**Response** `200`
+```json
+{ "files_removed": 12, "bytes_freed": 10485760 }
+```
+
+---
+
+## Metrics *(protected)*
+
+### `GET /api/metrics`
+
+Operational runtime metrics.
+
+**Response** `200`
+```json
+{
+  "uptime_secs": 3600,
+  "cache_bytes": 12345,
+  "cache_files": 12,
+  "bandwidth": { "date": "2026-03-31", "up_bytes": 0, "down_bytes": 0 },
+  "telegram_connected": false,
+  "upload_queue_length": 0
+}
 ```
 
 ---

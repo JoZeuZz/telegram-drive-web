@@ -1,16 +1,11 @@
-use actix_session::{
-    config::PersistentSession,
-    storage::CookieSessionStore,
-    SessionMiddleware,
-};
+use actix_session::{config::PersistentSession, storage::CookieSessionStore, SessionMiddleware};
 use actix_web::cookie::Key;
 use std::sync::Arc;
 
 use telegram_drive_server::{
     app_state::AppState,
     config::Config,
-    http,
-    jobs,
+    http, jobs,
     services::{bandwidth::BandwidthManager, bootstrap, upload_queue::UploadQueue},
 };
 
@@ -31,26 +26,38 @@ async fn main() -> std::io::Result<()> {
             .with_thread_ids(true)
             .init();
     } else {
-        tracing_subscriber::fmt()
-            .with_env_filter(env_filter)
-            .init();
+        tracing_subscriber::fmt().with_env_filter(env_filter).init();
     }
 
     // Load configuration
     let config = Config::from_env();
+    config
+        .validate_runtime_security()
+        .map_err(|msg| std::io::Error::new(std::io::ErrorKind::InvalidInput, msg))?;
 
-    if !config.cookie_secure {
+    if !config.cookie_secure && !config.app_env.is_production() {
         tracing::warn!(
             "COOKIE_SECURE=false: session cookie will be sent over plain HTTP. Use true behind TLS reverse proxy."
         );
     }
 
-    tracing::info!("Starting telegram-drive-server v{}", env!("CARGO_PKG_VERSION"));
+    tracing::info!(
+        "Starting telegram-drive-server v{}",
+        env!("CARGO_PKG_VERSION")
+    );
     tracing::info!("Listening on {}:{}", config.host, config.port);
+    tracing::info!("Runtime environment: {}", config.app_env.as_str());
+    tracing::info!(
+        "Rate limiting: app-auth={}/{}s telegram-auth={}/{}s trust_proxy_headers={}",
+        config.app_auth_rate_limit_max_requests,
+        config.app_auth_rate_limit_window_secs,
+        config.telegram_auth_rate_limit_max_requests,
+        config.telegram_auth_rate_limit_window_secs,
+        config.trust_proxy_headers
+    );
 
     // Ensure data directory exists before bootstrap
-    std::fs::create_dir_all(&config.data_dir)
-        .expect("Failed to create data directory");
+    std::fs::create_dir_all(&config.data_dir).expect("Failed to create data directory");
 
     // Bootstrap admin user (hash password, persist to admin.json)
     let admin_hash = bootstrap::ensure_admin(&config.data_dir, &config.admin_password)
@@ -76,6 +83,7 @@ async fn main() -> std::io::Result<()> {
     // Extract bind address before moving config into closure
     let bind_host = config.host.clone();
     let bind_port = config.port;
+    let route_config = http::RouteConfig::from_config(&config);
 
     // Start HTTP server
     actix_web::HttpServer::new(move || {
@@ -86,18 +94,15 @@ async fn main() -> std::io::Result<()> {
             .supports_credentials();
 
         // Cookie-based session middleware
-        let session = SessionMiddleware::builder(
-            CookieSessionStore::default(),
-            cookie_key.clone(),
-        )
-        .cookie_http_only(true)
-        .cookie_same_site(actix_web::cookie::SameSite::Strict)
-        .cookie_secure(config.cookie_secure)
-        .session_lifecycle(PersistentSession::default().session_ttl(
-            actix_web::cookie::time::Duration::hours(config.session_ttl_hours),
-        ))
-        .cookie_name("td_session".to_string())
-        .build();
+        let session = SessionMiddleware::builder(CookieSessionStore::default(), cookie_key.clone())
+            .cookie_http_only(true)
+            .cookie_same_site(actix_web::cookie::SameSite::Strict)
+            .cookie_secure(config.cookie_secure)
+            .session_lifecycle(PersistentSession::default().session_ttl(
+                actix_web::cookie::time::Duration::hours(config.session_ttl_hours),
+            ))
+            .cookie_name("td_session".to_string())
+            .build();
 
         actix_web::App::new()
             .wrap(cors)
@@ -108,7 +113,7 @@ async fn main() -> std::io::Result<()> {
             .app_data(bw.clone())
             .app_data(upload_queue.clone())
             .app_data(actix_web::web::PayloadConfig::new(512 * 1024 * 1024))
-            .configure(http::configure_routes)
+            .configure(|cfg| http::configure_routes(cfg, route_config))
     })
     .bind((bind_host.as_str(), bind_port))?
     .run()

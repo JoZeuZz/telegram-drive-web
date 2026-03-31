@@ -97,6 +97,7 @@ chmod 600 /opt/telegram-drive-web/.env
 Edit `/opt/telegram-drive-web/.env`:
 
 ```dotenv
+APP_ENV=production
 HOST=127.0.0.1
 PORT=8080
 FRONTEND_PORT=80
@@ -106,7 +107,12 @@ CACHE_DIR=/opt/telegram-drive-web/data/cache
 RUST_LOG=info
 LOG_FORMAT=json
 COOKIE_SECURE=true
+TRUST_PROXY_HEADERS=true
 SESSION_TTL_HOURS=8
+APP_AUTH_RATE_LIMIT_MAX_REQUESTS=10
+APP_AUTH_RATE_LIMIT_WINDOW_SECS=60
+TELEGRAM_AUTH_RATE_LIMIT_MAX_REQUESTS=5
+TELEGRAM_AUTH_RATE_LIMIT_WINDOW_SECS=60
 
 # REQUIRED — generate with: openssl rand -hex 32
 SESSION_SECRET=<your-secret>

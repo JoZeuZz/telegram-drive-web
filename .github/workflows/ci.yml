@@ -1,10 +1,23 @@
 name: CI
 
 on:
+  workflow_dispatch:
   push:
     branches: [main]
+    paths:
+      - "server/**"
+      - "web/**"
+      - ".github/workflows/ci.yml"
+      - ".env.example"
+      - "deploy/docker/**"
   pull_request:
     branches: [main]
+    paths:
+      - "server/**"
+      - "web/**"
+      - ".github/workflows/ci.yml"
+      - ".env.example"
+      - "deploy/docker/**"
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -98,9 +111,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Check web/src for @tauri-apps or invoke()
+      - name: Check web for residual @tauri-apps imports
         run: |
-          if grep -rn '@tauri-apps\|invoke(' web/src/ server/src/ 2>/dev/null | grep -v '// '; then
+          set -euo pipefail
+          if grep -RIn '@tauri-apps' web/src web/package.json web/package-lock.json 2>/dev/null; then
             echo "::error::Found residual Tauri references"
             exit 1
           fi

@@ -7,7 +7,7 @@ use actix_web::{test, web, App};
 use std::sync::Arc;
 
 use crate::app_state::AppState;
-use crate::config::Config;
+use crate::config::{AppEnv, Config};
 use crate::http;
 use crate::services::bandwidth::BandwidthManager;
 use crate::services::bootstrap;
@@ -17,6 +17,7 @@ fn test_config(data_dir: &str) -> Config {
     Config {
         host: "127.0.0.1".into(),
         port: 0,
+        app_env: AppEnv::Development,
         frontend_port: 3000,
         cors_allowed_origin: "http://localhost:3000".into(),
         data_dir: data_dir.into(),
@@ -25,6 +26,11 @@ fn test_config(data_dir: &str) -> Config {
         cookie_secure: false,
         session_ttl_hours: 8,
         admin_password: "testpass".into(),
+        trust_proxy_headers: false,
+        app_auth_rate_limit_max_requests: 10,
+        app_auth_rate_limit_window_secs: 60,
+        telegram_auth_rate_limit_max_requests: 5,
+        telegram_auth_rate_limit_window_secs: 60,
         telegram_api_id: 0,
         telegram_api_hash: String::new(),
     }
@@ -34,6 +40,7 @@ struct TestEnv {
     state: web::Data<AppState>,
     bw: web::Data<BandwidthManager>,
     queue: web::Data<UploadQueue>,
+    route_config: http::RouteConfig,
     cookie_key: Key,
 }
 
@@ -51,6 +58,7 @@ impl TestEnv {
             state: web::Data::from(state_arc),
             bw: web::Data::from(bw_arc),
             queue: web::Data::new(queue),
+            route_config: http::RouteConfig::from_config(&config),
             cookie_key: Key::generate(),
         }
     }
@@ -58,18 +66,17 @@ impl TestEnv {
 
 macro_rules! test_app {
     ($env:expr) => {{
-        let session = SessionMiddleware::builder(
-            CookieSessionStore::default(),
-            $env.cookie_key.clone(),
-        )
-        .cookie_http_only(true)
-        .cookie_same_site(SameSite::Strict)
-        .cookie_secure(false)
-        .session_lifecycle(PersistentSession::default().session_ttl(
-            actix_web::cookie::time::Duration::hours(8),
-        ))
-        .cookie_name("td_session".into())
-        .build();
+        let session =
+            SessionMiddleware::builder(CookieSessionStore::default(), $env.cookie_key.clone())
+                .cookie_http_only(true)
+                .cookie_same_site(SameSite::Strict)
+                .cookie_secure(false)
+                .session_lifecycle(
+                    PersistentSession::default()
+                        .session_ttl(actix_web::cookie::time::Duration::hours(8)),
+                )
+                .cookie_name("td_session".into())
+                .build();
 
         test::init_service(
             App::new()
@@ -78,7 +85,7 @@ macro_rules! test_app {
                 .app_data($env.bw.clone())
                 .app_data($env.queue.clone())
                 .app_data(web::PayloadConfig::new(512 * 1024 * 1024))
-                .configure(http::configure_routes),
+                .configure(|cfg| http::configure_routes(cfg, $env.route_config)),
         )
         .await
     }};
@@ -198,10 +205,7 @@ async fn login_correct_password_sets_cookie() {
     assert_eq!(resp.status(), StatusCode::OK);
 
     // Session cookie should be set
-    let has_cookie = resp
-        .response()
-        .cookies()
-        .any(|c| c.name() == "td_session");
+    let has_cookie = resp.response().cookies().any(|c| c.name() == "td_session");
     assert!(has_cookie, "Session cookie td_session not set");
 
     let set_cookie = resp

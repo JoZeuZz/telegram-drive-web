@@ -1,35 +1,31 @@
 # Code Style & Conventions
 
-## TypeScript/React
+## TypeScript/React (web)
 - Functional components only (no class components)
-- Custom hooks pattern: `use[Feature].ts` in `hooks/` directory
-- Context pattern: separate `context/` and `contexts/` folders for providers
-- TailwindCSS utility classes for styling (no CSS modules)
-- `@tanstack/react-query` for server state (files fetching)
-- `@tauri-apps/plugin-store` for persistent local state (JSON files)
+- Custom hooks under `web/src/hooks/`
+- Shared API client in `web/src/lib/api.ts` (typed `fetch` wrappers)
+- React Query for server state and cache invalidation
+- TailwindCSS utility classes for styling
 - `sonner` for toast notifications
 - `framer-motion` for animations
 - `lucide-react` for icons
-- camelCase for functions/variables, PascalCase for components/interfaces
-- `invoke()` from `@tauri-apps/api/core` for all Tauri command calls
+- camelCase for variables/functions, PascalCase for components/types
 - TypeScript strict mode enabled
-- ESNext module system
 
-## Rust
+## Rust (server)
 - Async/await with tokio runtime
-- `Arc<Mutex<>>` for shared state 
-- `#[tauri::command]` for IPC handlers
-- `serde` derive for serialization
-- `grammers` library for Telegram MTProto
-- Error handling: `map_error()` utility that handles FLOOD_WAIT specially
-- Mock mode: many commands return mock data when client is None
-- Actix-Web for HTTP streaming server (separate thread with own runtime)
-- Session stored as SQLite via `grammers_session::SqliteSession`
-- Token-based auth for streaming server (random hex token per session)
+- Actix-Web for HTTP API and middleware
+- `Arc<Mutex<...>>` / `RwLock` for shared mutable state
+- `serde` derives for DTO serialization
+- `grammers` for Telegram MTProto operations
+- Error mapping centralized through `AppError`
+- Cookie-based session auth with CSRF header checks
 
 ## File Organization
-- Components: `src/components/` (top-level) and `src/components/dashboard/` (dashboard sub-components)
-- Hooks: `src/hooks/`
-- Types: `src/types.ts` (single file)
-- Utils: `src/utils.ts` (single file)
-- Rust commands: `src-tauri/src/commands/` (split by domain: auth, fs, preview, network, streaming, utils)
+- Frontend components: `web/src/components/` + `web/src/components/dashboard/`
+- Frontend hooks: `web/src/hooks/`
+- Frontend API/types: `web/src/lib/api.ts`, `web/src/types.ts`
+- Backend routes: `server/src/http/routes/`
+- Backend middleware: `server/src/http/middleware/`
+- Backend services: `server/src/services/`
+- Backend storage helpers: `server/src/storage/`

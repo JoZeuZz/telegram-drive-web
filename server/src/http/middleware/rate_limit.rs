@@ -15,6 +15,7 @@ use std::time::Instant;
 pub struct RateLimit {
     max_requests: u32,
     window_secs: u64,
+    trust_proxy_headers: bool,
 }
 
 impl RateLimit {
@@ -22,7 +23,13 @@ impl RateLimit {
         Self {
             max_requests,
             window_secs,
+            trust_proxy_headers: false,
         }
+    }
+
+    pub fn with_trust_proxy_headers(mut self, trust_proxy_headers: bool) -> Self {
+        self.trust_proxy_headers = trust_proxy_headers;
+        self
     }
 }
 
@@ -47,6 +54,7 @@ where
             buckets: Rc::new(Mutex::new(HashMap::new())),
             max_requests: self.max_requests,
             window_secs: self.window_secs,
+            trust_proxy_headers: self.trust_proxy_headers,
         })
     }
 }
@@ -56,6 +64,7 @@ pub struct RateLimitMiddleware<S> {
     buckets: Rc<Mutex<HashMap<String, Bucket>>>,
     max_requests: u32,
     window_secs: u64,
+    trust_proxy_headers: bool,
 }
 
 impl<S> Service<ServiceRequest> for RateLimitMiddleware<S>
@@ -74,7 +83,7 @@ where
     }
 
     fn call(&self, req: ServiceRequest) -> Self::Future {
-        let peer = peer_ip(&req);
+        let peer = peer_ip(&req, self.trust_proxy_headers);
         let allowed = {
             let mut map = self.buckets.lock().expect("rate-limit lock poisoned");
             let now = Instant::now();
@@ -103,9 +112,7 @@ where
             tracing::warn!(peer = %peer, "Rate limit exceeded");
             let resp = HttpResponse::build(StatusCode::TOO_MANY_REQUESTS)
                 .json(serde_json::json!({ "error": "Too many requests. Try again later." }));
-            return Box::pin(async move {
-                Ok(req.into_response(resp))
-            });
+            return Box::pin(async move { Ok(req.into_response(resp)) });
         }
 
         let svc = self.service.clone();
@@ -114,15 +121,48 @@ where
 }
 
 /// Extract the client IP, preferring X-Forwarded-For (set by the reverse proxy).
-fn peer_ip(req: &ServiceRequest) -> String {
-    req.headers()
-        .get("x-forwarded-for")
-        .and_then(|v| v.to_str().ok())
-        .and_then(|v| v.split(',').next())
-        .map(|s| s.trim().to_string())
-        .or_else(|| {
-            req.peer_addr()
-                .map(|addr| addr.ip().to_string())
-        })
+fn peer_ip(req: &ServiceRequest, trust_proxy_headers: bool) -> String {
+    if trust_proxy_headers {
+        if let Some(forwarded) = req
+            .headers()
+            .get("x-forwarded-for")
+            .and_then(|v| v.to_str().ok())
+            .and_then(|v| v.split(',').next())
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty() && *s != "unknown")
+        {
+            return forwarded.to_string();
+        }
+    }
+
+    req.peer_addr()
+        .map(|addr| addr.ip().to_string())
         .unwrap_or_else(|| "unknown".to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::peer_ip;
+    use actix_web::test::TestRequest;
+    use std::net::SocketAddr;
+
+    #[test]
+    fn peer_ip_uses_socket_address_when_proxy_not_trusted() {
+        let req = TestRequest::default()
+            .insert_header(("x-forwarded-for", "203.0.113.7, 10.0.0.1"))
+            .peer_addr("198.51.100.9:12345".parse::<SocketAddr>().unwrap())
+            .to_srv_request();
+
+        assert_eq!(peer_ip(&req, false), "198.51.100.9");
+    }
+
+    #[test]
+    fn peer_ip_uses_x_forwarded_for_when_proxy_is_trusted() {
+        let req = TestRequest::default()
+            .insert_header(("x-forwarded-for", "203.0.113.7, 10.0.0.1"))
+            .peer_addr("198.51.100.9:12345".parse::<SocketAddr>().unwrap())
+            .to_srv_request();
+
+        assert_eq!(peer_ip(&req, true), "203.0.113.7");
+    }
 }

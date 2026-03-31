@@ -1,11 +1,13 @@
 # Task Completion Checklist
 
-## After making changes:
-1. Run `npm run build` in `app/` to check TypeScript compilation
-2. Run `cargo check` in `app/src-tauri/` for Rust changes
-3. Test with `npm run tauri dev` for full integration
+## After making changes
+1. Run `npm run build` in `web/` to validate TypeScript + Vite build.
+2. Run `cargo test --release` in `server/` to validate backend behavior.
+3. If backend Rust code changed, run `cargo fmt` and keep diffs focused.
 
-## No linter/formatter configured
-- No ESLint or Prettier in dependencies
-- No cargo fmt/clippy in CI
-- TypeScript compiler is the main check (strict mode)
+## CI expectations
+- GitHub Actions CI is defined in `.github/workflows/ci.yml`.
+- CI checks include:
+  - Rust fmt/clippy/build/tests
+  - Frontend type-check + build
+  - Residual `@tauri-apps` detection in `web/`

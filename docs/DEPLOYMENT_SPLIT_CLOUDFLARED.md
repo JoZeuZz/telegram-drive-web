@@ -31,9 +31,12 @@ Key behavior:
 1. Create a Docker Compose application using:
    - `deploy/docker/docker-compose.coolify.yml`
 2. Configure required environment variables in Coolify UI:
+   - `APP_ENV=production`
    - `CORS_ALLOWED_ORIGIN`
+   - `COOKIE_SECURE=true`
    - `SESSION_SECRET`
    - `ADMIN_PASSWORD`
+   - `TRUST_PROXY_HEADERS=true` (recommended in this topology)
    - `TELEGRAM_API_ID`
    - `TELEGRAM_API_HASH`
    - Use root `.env.example` as the single contract reference for names/defaults.
