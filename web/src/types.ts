@@ -27,6 +27,8 @@ export interface QueueItem {
     id: string;
     file: File;
     folderId: number | null;
+    topicId?: number | null;
+    topicTopMessage?: number | null;
     status: 'pending' | 'uploading' | 'success' | 'error' | 'cancelled';
     stage?: 'browser_to_server' | 'server_to_telegram' | 'completed' | 'failed' | 'cancelled';
     progressPercent?: number;
@@ -43,6 +45,11 @@ export interface BandwidthStats {
     date?: string;
     up_bytes: number;
     down_bytes: number;
+    limit_bytes?: number;
+    remaining_bytes?: number;
+    tier?: 'free' | 'premium';
+    dynamic_limits_enabled?: boolean;
+    fallback_mode?: boolean;
 }
 
 export interface DownloadItem {

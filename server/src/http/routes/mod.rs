@@ -1,8 +1,10 @@
+pub mod account;
 pub mod admin;
 pub mod app_auth;
 pub mod bandwidth;
 pub mod files;
 pub mod folders;
+pub mod forums;
 pub mod health;
 pub mod media;
 pub mod metrics;

@@ -140,9 +140,14 @@ Disconnect from Telegram, remove session.
 
 ## Files *(protected)*
 
-### `GET /api/files?folder_id=<id>`
+### `GET /api/files?folder_id=<id>&topic_id=<id>&topic_top_message=<msg_id>`
 
 List files in a folder. Omit `folder_id` for Saved Messages (root).
+
+For structured subfolders (forum topics):
+- Set `folder_id` to the structured folder root ID.
+- Set `topic_id` to the topic ID.
+- Optionally set `topic_top_message` from `/api/forums/{forum_id}/topics` to avoid extra topic-resolution calls.
 
 **Response** `200`
 ```json
@@ -160,13 +165,15 @@ List files in a folder. Omit `folder_id` for Saved Messages (root).
 ]
 ```
 
-### `POST /api/files/upload?folder_id=<id>&queue=<bool>&as_photo=<bool>`
+### `POST /api/files/upload?folder_id=<id>&topic_id=<id>&topic_top_message=<msg_id>&queue=<bool>&as_photo=<bool>`
 
 Upload a file via `multipart/form-data`.
 
 | Query Param | Type | Default | Description |
 |---|---|---|---|
 | `folder_id` | `i64?` | `null` | Target folder (channel ID). |
+| `topic_id` | `i32?` | `null` | Target topic ID inside a structured folder root. |
+| `topic_top_message` | `i32?` | `null` | Optional top message of the topic; reduces Telegram API round-trips when provided. |
 | `queue` | `bool` | `false` | If `true`, enqueue for background upload. |
 | `as_photo` | `bool` | `false` | If `true` and file is an image, upload as Telegram photo media. |
 
@@ -207,14 +214,24 @@ Delete a file.
 
 Move files between folders.
 
+Supports legacy folders and structured subfolders (forum topics).
+
 **Body**
 ```json
 {
   "message_ids": [101, 102],
   "source_folder_id": 456,
-  "target_folder_id": 789
+  "source_topic_id": null,
+  "target_folder_id": 789,
+  "target_topic_id": null,
+  "target_topic_top_message": null
 }
 ```
+
+Notes:
+- `source_topic_id` is optional; set it when moving files from a structured subfolder.
+- `target_topic_id` is optional; set it when moving files into a structured subfolder.
+- `target_topic_top_message` is optional but recommended for structured destinations to reduce lookup calls.
 
 **Response** `200`
 ```json
@@ -282,6 +299,112 @@ Force a Telegram folder rescan and return integrity metrics for hierarchy resolu
 
 ---
 
+## Forums / Communities *(protected, feature-flagged)*
+
+These endpoints are enabled only when `FORUMS_ENABLED=true`.
+They are additive and do not replace legacy `/api/folders` behavior.
+
+### `GET /api/forums`
+
+List forum-enabled Telegram communities (supergroups with forums enabled).
+
+**Response** `200`
+```json
+{
+  "forums": [
+    { "id": 123456789, "name": "Engineering" }
+  ]
+}
+```
+
+### `POST /api/forums`
+
+Create a new forum-enabled community.
+
+**Body**
+```json
+{ "name": "New Community" }
+```
+
+**Response** `201`
+```json
+{ "id": 123456789, "name": "New Community" }
+```
+
+### `DELETE /api/forums/{forum_id}`
+
+Delete a structured folder root (forum-enabled supergroup).
+
+**Response** `200`
+```json
+{ "success": true }
+```
+
+### `GET /api/forums/{forum_id}/topics`
+
+List topics for a specific forum community.
+
+**Response** `200`
+```json
+{
+  "topics": [
+    {
+      "id": 42,
+      "forum_id": 123456789,
+      "title": "Roadmap",
+      "icon_color": 7313904,
+      "icon_emoji_id": null,
+      "closed": false,
+      "hidden": false,
+      "pinned": false,
+      "top_message": 1001
+    }
+  ]
+}
+```
+
+### `POST /api/forums/{forum_id}/topics`
+
+Create a new topic in a forum community.
+
+**Body**
+```json
+{
+  "title": "Announcements",
+  "icon_color": 7313904,
+  "icon_emoji_id": null
+}
+```
+
+**Response** `201`
+```json
+{
+  "id": 43,
+  "forum_id": 123456789,
+  "title": "Announcements",
+  "icon_color": 7313904,
+  "icon_emoji_id": null,
+  "closed": false,
+  "hidden": false,
+  "pinned": false,
+  "top_message": 1002
+}
+```
+
+### `DELETE /api/forums/{forum_id}/topics/{topic_id}`
+
+Delete a structured subfolder (forum topic).
+
+Optional query params:
+- `top_message`: `i32` top message id for the topic. If omitted, the server resolves it.
+
+**Response** `200`
+```json
+{ "success": true }
+```
+
+---
+
 ## Search *(protected)*
 
 ### `GET /api/search?q=<query>`
@@ -316,7 +439,54 @@ Get daily bandwidth usage statistics.
 
 **Response** `200`
 ```json
-{ "date": "2025-03-30", "up_bytes": 0, "down_bytes": 0 }
+{
+  "date": "2025-03-30",
+  "up_bytes": 0,
+  "down_bytes": 0,
+  "limit_bytes": 268435456000,
+  "remaining_bytes": 268435456000,
+  "tier": "free",
+  "dynamic_limits_enabled": true,
+  "fallback_mode": false
+}
+```
+
+---
+
+## Account Info *(protected)*
+
+### `GET /api/account-info`
+
+Returns cached Telegram account profile (if available) plus effective limits.
+
+**Response** `200`
+```json
+{
+  "authenticated": true,
+  "dynamic_limits_enabled": true,
+  "fallback_mode": false,
+  "tier": "premium",
+  "limits": {
+    "file_size_limit_bytes": 4294967296,
+    "daily_bandwidth_limit_bytes": 858993459200
+  },
+  "bandwidth": {
+    "date": "2025-03-30",
+    "up_bytes": 0,
+    "down_bytes": 0,
+    "limit_bytes": 858993459200,
+    "remaining_bytes": 858993459200
+  },
+  "profile": {
+    "user_id": 123456789,
+    "first_name": "Alice",
+    "last_name": null,
+    "username": "alice",
+    "phone": "+1234567890",
+    "is_premium": true,
+    "checked_at_unix_ms": 1764595200000
+  }
+}
 ```
 
 ---
@@ -389,7 +559,18 @@ Operational runtime metrics.
   "cache_bytes": 12345,
   "cache_files": 12,
   "max_file_size_bytes": 2097152000,
-  "bandwidth": { "date": "2026-03-31", "up_bytes": 0, "down_bytes": 0 },
+  "max_file_size_tier": "free",
+  "dynamic_limits_enabled": true,
+  "fallback_mode": false,
+  "telegram_account_cached": true,
+  "bandwidth": {
+    "date": "2026-03-31",
+    "up_bytes": 0,
+    "down_bytes": 0,
+    "limit_bytes": 268435456000,
+    "remaining_bytes": 268435456000,
+    "tier": "free"
+  },
   "telegram_connected": false,
   "upload_queue_length": 0
 }

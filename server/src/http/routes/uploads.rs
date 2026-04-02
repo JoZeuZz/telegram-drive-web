@@ -103,8 +103,8 @@ async fn clear_finished(queue: web::Data<UploadQueue>) -> Result<HttpResponse, A
 
 pub fn configure(cfg: &mut web::ServiceConfig) {
     cfg.service(list_uploads)
-    .service(get_upload_progress)
-    .service(stream_upload_progress)
+        .service(get_upload_progress)
+        .service(stream_upload_progress)
         .service(clear_finished)
         .service(cancel_upload);
 }

@@ -12,12 +12,16 @@
 ### Tests
 
 - Extended backend integration tests to assert session cookie security attributes (`HttpOnly`, `SameSite=Strict`).
+- Added backend integration coverage for `/api/account-info` and dynamic limit fields in `/api/metrics`.
 
 ### Docs
 
 - Updated session security docs to reflect cookie-session storage behavior and TTL configuration.
 - Updated deployment docs to use the single root `.env.example` contract across local, Coolify, and LXC workflows.
 - Added split deployment documentation for external Cloudflared tunnel in front of Coolify, using generic placeholders and no infra-specific data.
+- Documented tier-aware limit responses (`/api/bandwidth`, `/api/metrics`) and the new `/api/account-info` endpoint.
+- Documented new feature-flagged forums/community endpoints (`/api/forums` and `/api/forums/{forum_id}/topics`).
+- Documented topic-aware file move payload for `/api/files/move` including structured subfolder destinations.
 
 ### Deployment
 
@@ -42,6 +46,12 @@
 - Added hierarchical folder UX and API behavior for `parent_id`, subtree-aware sync state, and cascade delete reporting (`deleted_count`).
 - Folder hierarchy sync now resolves parent metadata primarily from channel title (`[TD|s=1|p=...]`), with legacy `about` fallback using bounded retry/backoff and FLOOD_WAIT early cutoff.
 - Added lazy migration for legacy folder titles during sync and exposed sync integrity summary in `/api/folders/sync` (`resolved_by_title`, `resolved_by_about`, `orphans`, `migrated`) for frontend visibility.
+- Added dynamic account-tier limit foundations: cached Telegram profile (with premium flag), effective limit computation, and conservative fallback to Free tier when account detection is stale/unavailable.
+- Updated upload/download and preview bandwidth checks to use effective per-tier limits.
+- Added protected `/api/account-info` endpoint and enriched `/api/bandwidth` and `/api/metrics` with tier/limit context.
+- Added account tier badge in Dashboard sidebar (Free/Premium) with explicit fallback-mode warning.
+- Added initial hybrid Communities/Topics backend block with feature flag (`FORUMS_ENABLED`) and protected APIs to list/create forums and list/create forum topics, while preserving legacy `/api/folders` flow.
+- Added drag-and-drop move parity across legacy folders and structured subfolders, with backend topic-aware forwarding (`top_msg_id`) and source/target topic context in move payloads.
 
 ## [1.0.4] - 2026-02-13
 

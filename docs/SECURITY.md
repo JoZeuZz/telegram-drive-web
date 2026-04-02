@@ -29,6 +29,8 @@ This application is designed for **single-user, homelab deployment behind a VPN*
 - The Telegram session file is stored on disk, never sent to the browser
 - During login setup, `api_hash` is kept in browser `sessionStorage` (tab-scoped), not long-lived local storage
 - The Telegram auth flow (phone → code → 2FA) happens over the app's authenticated API
+- Account tier (Free/Premium) is cached server-side after Telegram auth and refreshed on connection checks
+- If tier detection is stale/unavailable and fallback is enabled, the server applies Free-tier limits conservatively
 
 ## Transport security
 
@@ -55,7 +57,7 @@ This application is designed for **single-user, homelab deployment behind a VPN*
 ## Input validation
 
 - All user input is validated at the HTTP layer before reaching services
-- File uploads are checked against `MAX_FILE_SIZE_BYTES` (default: `2097152000`, ~2 GB decimal)
+- File uploads are checked against effective server-side limits (tier-aware when dynamic limits are enabled)
 - Request payload size is capped by backend payload configuration and reverse proxy limits
 - Upload mode `as_photo=true` can prioritize Telegram photo UX for images, which does not guarantee exact filename preservation
 - Upload mode `as_photo=false` sends document/file media and preserves filename/extension metadata

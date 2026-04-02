@@ -9,5 +9,6 @@ pub mod streaming;
 pub mod telegram_auth;
 pub mod telegram_files;
 pub mod telegram_folders;
+pub mod telegram_forums;
 pub mod upload_progress;
 pub mod upload_queue;

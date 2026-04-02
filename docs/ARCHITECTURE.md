@@ -55,6 +55,7 @@ Infrastructure configs for systemd, nginx, caddy, and docker.
 7. **Streaming through the server** — Media is streamed from Telegram through the Actix server to the browser.
 8. **Virtual folder hierarchy** — Subfolders are modeled as independent Telegram channels with parent metadata managed by the app (`parent_id`), instead of relying on Telegram-native nested folders.
 9. **Unified media cache** — Previews and thumbnails are stored under the same cache root (`CACHE_DIR/media`) to simplify cleanup and avoid key collisions.
+10. **Tier-aware limits** — Effective file-size and daily bandwidth limits are computed server-side from cached Telegram account tier (Free/Premium) with conservative fallback when detection is stale or unavailable.
 
 ## Data flow examples
 

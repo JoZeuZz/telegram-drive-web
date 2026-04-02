@@ -38,6 +38,13 @@ pub struct Config {
     pub cookie_secure: bool,
     pub session_ttl_hours: i64,
     pub max_file_size_bytes: u64,
+    pub premium_max_file_size_bytes: u64,
+    pub free_daily_bandwidth_limit_bytes: u64,
+    pub premium_daily_bandwidth_limit_bytes: u64,
+    pub dynamic_limits_enabled: bool,
+    pub forums_enabled: bool,
+    pub fallback_to_free_on_error: bool,
+    pub premium_detection_ttl_secs: u64,
     pub admin_password: String,
     pub trust_proxy_headers: bool,
     pub app_auth_rate_limit_max_requests: u32,
@@ -147,6 +154,8 @@ impl Config {
             }
         };
 
+        let free_max_file_size_bytes = env_positive_u64("MAX_FILE_SIZE_BYTES", 2_097_152_000);
+
         Self {
             app_env,
             host: std::env::var("HOST").unwrap_or_else(|_| "127.0.0.1".to_string()),
@@ -161,7 +170,23 @@ impl Config {
             session_secret,
             cookie_secure: env_bool("COOKIE_SECURE", false),
             session_ttl_hours: env_positive_i64("SESSION_TTL_HOURS", 8),
-            max_file_size_bytes: env_positive_u64("MAX_FILE_SIZE_BYTES", 2_097_152_000),
+            max_file_size_bytes: free_max_file_size_bytes,
+            premium_max_file_size_bytes: env_positive_u64(
+                "PREMIUM_MAX_FILE_SIZE_BYTES",
+                4_294_967_296,
+            ),
+            free_daily_bandwidth_limit_bytes: env_positive_u64(
+                "FREE_DAILY_BANDWIDTH_LIMIT_BYTES",
+                250 * 1024 * 1024 * 1024,
+            ),
+            premium_daily_bandwidth_limit_bytes: env_positive_u64(
+                "PREMIUM_DAILY_BANDWIDTH_LIMIT_BYTES",
+                800 * 1024 * 1024 * 1024,
+            ),
+            dynamic_limits_enabled: env_bool("DYNAMIC_LIMITS_ENABLED", true),
+            forums_enabled: env_bool("FORUMS_ENABLED", true),
+            fallback_to_free_on_error: env_bool("FALLBACK_TO_FREE_ON_ERROR", true),
+            premium_detection_ttl_secs: env_positive_u64("PREMIUM_DETECTION_TTL_SECS", 3600),
             admin_password: std::env::var("ADMIN_PASSWORD")
                 .unwrap_or_else(|_| "changeme".to_string()),
             trust_proxy_headers: env_bool("TRUST_PROXY_HEADERS", false),
@@ -258,6 +283,13 @@ mod tests {
             cookie_secure: true,
             session_ttl_hours: 8,
             max_file_size_bytes: 512_u64 * 1024 * 1024,
+            premium_max_file_size_bytes: 1024_u64 * 1024 * 1024,
+            free_daily_bandwidth_limit_bytes: 250_u64 * 1024 * 1024 * 1024,
+            premium_daily_bandwidth_limit_bytes: 800_u64 * 1024 * 1024 * 1024,
+            dynamic_limits_enabled: true,
+            forums_enabled: true,
+            fallback_to_free_on_error: true,
+            premium_detection_ttl_secs: 3600,
             admin_password: "correct-horse-battery-staple".into(),
             trust_proxy_headers: true,
             app_auth_rate_limit_max_requests: 10,

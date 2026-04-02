@@ -1,5 +1,5 @@
 // DTOs — Data Transfer Objects for HTTP request/response payloads.
-use crate::domain::models::FolderMetadata;
+use crate::domain::models::{FolderMetadata, ForumMetadata, ForumTopicMetadata};
 use serde::{Deserialize, Serialize};
 
 // ─── App Auth ────────────────────────────────────────────
@@ -58,18 +58,32 @@ pub struct MessageResponse {
 #[derive(Deserialize)]
 pub struct FolderIdQuery {
     pub folder_id: Option<i64>,
+    #[serde(default)]
+    pub topic_id: Option<i32>,
+    #[serde(default)]
+    pub topic_top_message: Option<i32>,
 }
 
 #[derive(Deserialize)]
 pub struct MoveFilesRequest {
     pub message_ids: Vec<i32>,
     pub source_folder_id: Option<i64>,
+    #[serde(default)]
+    pub source_topic_id: Option<i32>,
     pub target_folder_id: Option<i64>,
+    #[serde(default)]
+    pub target_topic_id: Option<i32>,
+    #[serde(default)]
+    pub target_topic_top_message: Option<i32>,
 }
 
 #[derive(Deserialize)]
 pub struct UploadQuery {
     pub folder_id: Option<i64>,
+    #[serde(default)]
+    pub topic_id: Option<i32>,
+    #[serde(default)]
+    pub topic_top_message: Option<i32>,
     #[serde(default)]
     pub queue: bool,
     #[serde(default)]
@@ -107,6 +121,38 @@ pub struct FolderSyncSummaryResponse {
 pub struct FolderSyncResponse {
     pub folders: Vec<FolderMetadata>,
     pub summary: FolderSyncSummaryResponse,
+}
+
+// ─── Forums / Communities ───────────────────────────────
+
+#[derive(Deserialize)]
+pub struct CreateForumRequest {
+    pub name: String,
+}
+
+#[derive(Deserialize)]
+pub struct CreateForumTopicRequest {
+    pub title: String,
+    #[serde(default)]
+    pub icon_color: Option<i32>,
+    #[serde(default)]
+    pub icon_emoji_id: Option<i64>,
+}
+
+#[derive(Deserialize)]
+pub struct DeleteForumTopicQuery {
+    #[serde(default)]
+    pub top_message: Option<i32>,
+}
+
+#[derive(Serialize)]
+pub struct ListForumsResponse {
+    pub forums: Vec<ForumMetadata>,
+}
+
+#[derive(Serialize)]
+pub struct ListForumTopicsResponse {
+    pub topics: Vec<ForumTopicMetadata>,
 }
 
 // ─── Search ──────────────────────────────────────────────

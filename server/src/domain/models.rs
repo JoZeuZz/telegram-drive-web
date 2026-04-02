@@ -24,6 +24,26 @@ pub struct AuthResult {
     pub error: Option<String>,
 }
 
+/// Account tier derived from the authenticated Telegram user.
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, Eq, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum AccountTier {
+    Free,
+    Premium,
+}
+
+/// Cached Telegram account profile used for tier-aware limits.
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct TelegramAccountProfile {
+    pub user_id: i64,
+    pub first_name: Option<String>,
+    pub last_name: Option<String>,
+    pub username: Option<String>,
+    pub phone: Option<String>,
+    pub is_premium: bool,
+    pub checked_at_unix_ms: i64,
+}
+
 /// Metadata for a file stored in Telegram.
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct FileMetadata {
@@ -43,6 +63,27 @@ pub struct FolderMetadata {
     pub id: i64,
     pub parent_id: Option<i64>,
     pub name: String,
+}
+
+/// Metadata for a forum-enabled supergroup (community root).
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ForumMetadata {
+    pub id: i64,
+    pub name: String,
+}
+
+/// Metadata for a forum topic inside a community.
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ForumTopicMetadata {
+    pub id: i32,
+    pub forum_id: i64,
+    pub title: String,
+    pub icon_color: i32,
+    pub icon_emoji_id: Option<i64>,
+    pub closed: bool,
+    pub hidden: bool,
+    pub pinned: bool,
+    pub top_message: i32,
 }
 
 /// Daily bandwidth usage statistics.

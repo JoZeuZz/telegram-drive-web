@@ -103,7 +103,9 @@ pub async fn get_preview(
                     _ => 0,
                 };
 
-                if bw.can_transfer(size).is_err() {
+                let limit = state.effective_daily_bandwidth_limit_bytes().await;
+
+                if bw.can_transfer_with_limit(size, limit).is_err() {
                     false
                 } else {
                     match client.download_media(&media, &save_path_str).await {

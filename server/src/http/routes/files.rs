@@ -8,8 +8,8 @@ use crate::domain::dto::*;
 use crate::errors::AppError;
 use crate::services::{
     bandwidth::BandwidthManager,
-    upload_progress::{UploadProgressManager, UploadProgressReporter},
     streaming, telegram_files,
+    upload_progress::{UploadProgressManager, UploadProgressReporter},
     upload_queue::{UploadJob, UploadQueue},
 };
 
@@ -19,7 +19,13 @@ async fn list_files(
     query: web::Query<FolderIdQuery>,
     state: web::Data<AppState>,
 ) -> Result<HttpResponse, AppError> {
-    let files = telegram_files::get_files(&state, query.folder_id).await?;
+    let files = telegram_files::get_files(
+        &state,
+        query.folder_id,
+        query.topic_id,
+        query.topic_top_message,
+    )
+    .await?;
     Ok(HttpResponse::Ok().json(files))
 }
 
@@ -45,7 +51,10 @@ async fn move_files(
         &state,
         &body.message_ids,
         body.source_folder_id,
+        body.source_topic_id,
         body.target_folder_id,
+        body.target_topic_id,
+        body.target_topic_top_message,
     )
     .await?;
     Ok(HttpResponse::Ok().json(SuccessResponse { success: true }))
@@ -75,6 +84,7 @@ async fn upload_file(
             .filter(|value| !value.is_empty())
             .map(ToOwned::to_owned)
     };
+    let file_size_limit_bytes = state.effective_max_file_size_bytes().await;
 
     while let Some(mut field) = match payload.try_next().await {
         Ok(field) => field,
@@ -128,7 +138,7 @@ async fn upload_file(
                 if let Some(upload_id) = progress_upload_id.as_deref() {
                     upload_progress.update_browser_bytes(upload_id, total_bytes);
                 }
-                if total_bytes > state.max_file_size_bytes {
+                if total_bytes > file_size_limit_bytes {
                     drop(f);
                     let _ = std::fs::remove_file(&temp_path);
                     if let Some(upload_id) = progress_upload_id.as_deref() {
@@ -136,13 +146,13 @@ async fn upload_file(
                             upload_id,
                             format!(
                                 "File exceeds maximum allowed size ({} bytes)",
-                                state.max_file_size_bytes
+                                file_size_limit_bytes
                             ),
                         );
                     }
                     return Err(AppError::BadRequest(format!(
                         "File exceeds maximum allowed size ({} bytes)",
-                        state.max_file_size_bytes
+                        file_size_limit_bytes
                     )));
                 }
                 f.write_all(&chunk)
@@ -165,6 +175,8 @@ async fn upload_file(
                     file_name: filename,
                     content_type,
                     folder_id: query.folder_id,
+                    topic_id: query.topic_id,
+                    topic_top_message: query.topic_top_message,
                     size,
                     as_photo: query.as_photo,
                 })
@@ -174,15 +186,17 @@ async fn upload_file(
                 status: "queued".into(),
             }));
         } else {
-            let progress_reporter = progress_upload_id
-                .as_ref()
-                .map(|upload_id| UploadProgressReporter::new(upload_progress.get_ref().clone(), upload_id.clone()));
+            let progress_reporter = progress_upload_id.as_ref().map(|upload_id| {
+                UploadProgressReporter::new(upload_progress.get_ref().clone(), upload_id.clone())
+            });
 
             let result = telegram_files::upload_file(
                 &state,
                 &bw,
                 &temp_path_str,
                 query.folder_id,
+                query.topic_id,
+                query.topic_top_message,
                 &filename,
                 content_type.as_deref(),
                 query.as_photo,

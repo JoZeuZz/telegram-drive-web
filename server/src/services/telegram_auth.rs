@@ -1,14 +1,16 @@
+use chrono::Utc;
 use grammers_client::Client;
 use grammers_client::SignInError;
 use grammers_mtsender::SenderPool;
 use grammers_session::storages::SqliteSession;
+use grammers_tl_types as tl;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use tokio::sync::oneshot;
 use tokio::time::Duration;
 
 use crate::app_state::AppState;
-use crate::domain::models::AuthResult;
+use crate::domain::models::{AuthResult, TelegramAccountProfile};
 use crate::errors::{map_telegram_error, AppError};
 
 /// Ensures the Telegram client is initialized.
@@ -88,6 +90,35 @@ pub async fn ensure_client_initialized(state: &AppState, api_id: i32) -> Result<
     Ok(client)
 }
 
+fn extract_is_premium(user: &grammers_client::types::User) -> bool {
+    match &user.raw {
+        tl::enums::User::User(raw) => raw.premium,
+        tl::enums::User::Empty(_) => false,
+    }
+}
+
+fn to_account_profile(user: &grammers_client::types::User) -> TelegramAccountProfile {
+    TelegramAccountProfile {
+        user_id: user.bare_id(),
+        first_name: user.first_name().map(str::to_owned),
+        last_name: user.last_name().map(str::to_owned),
+        username: user.username().map(str::to_owned),
+        phone: user.phone().map(str::to_owned),
+        is_premium: extract_is_premium(user),
+        checked_at_unix_ms: Utc::now().timestamp_millis(),
+    }
+}
+
+async fn cache_account_profile(state: &AppState, user: &grammers_client::types::User) {
+    let profile = to_account_profile(user);
+    state.set_telegram_account_profile(profile.clone()).await;
+    tracing::info!(
+        user_id = profile.user_id,
+        premium = profile.is_premium,
+        "Updated Telegram account profile cache"
+    );
+}
+
 /// Store API ID and initialize client.
 pub async fn connect(state: &AppState, api_id: i32) -> Result<bool, AppError> {
     *state.api_id.lock().await = Some(api_id);
@@ -100,7 +131,8 @@ pub async fn check_connection(state: &AppState) -> Result<bool, AppError> {
     let client_opt = { state.telegram_client.lock().await.clone() };
 
     if let Some(client) = client_opt {
-        if client.get_me().await.is_ok() {
+        if let Ok(user) = client.get_me().await {
+            cache_account_profile(state, &user).await;
             return Ok(true);
         }
         tracing::warn!("Connection check failed (get_me). Attempting reconnect...");
@@ -113,7 +145,8 @@ pub async fn check_connection(state: &AppState) -> Result<bool, AppError> {
         *state.telegram_client.lock().await = None;
 
         let client = ensure_client_initialized(state, api_id).await?;
-        if client.get_me().await.is_ok() {
+        if let Ok(user) = client.get_me().await {
+            cache_account_profile(state, &user).await;
             tracing::info!("Auto-reconnect successful.");
             return Ok(true);
         } else {
@@ -150,6 +183,7 @@ pub async fn logout(state: &AppState) -> Result<bool, AppError> {
     *state.login_token.lock().await = None;
     *state.password_token.lock().await = None;
     *state.api_id.lock().await = None;
+    state.clear_telegram_account_profile().await;
 
     // 4. Remove session files
     let session_path = crate::storage::telegram_session::session_path(&state.data_dir);
@@ -231,7 +265,8 @@ pub async fn sign_in(state: &AppState, code: &str) -> Result<AuthResult, AppErro
     ))?;
 
     match client.sign_in(login_token, code).await {
-        Ok(_user) => {
+        Ok(user) => {
+            cache_account_profile(state, &user).await;
             tracing::info!("Successfully logged in.");
             Ok(AuthResult {
                 success: true,
@@ -274,7 +309,8 @@ pub async fn check_password(state: &AppState, password: &str) -> Result<AuthResu
         ))?;
 
     match client.check_password(pw_token, password).await {
-        Ok(_user) => {
+        Ok(user) => {
+            cache_account_profile(state, &user).await;
             tracing::info!("2FA Success.");
             Ok(AuthResult {
                 success: true,

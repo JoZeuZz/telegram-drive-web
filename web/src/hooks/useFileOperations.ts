@@ -8,6 +8,7 @@ import { useState } from 'react';
 
 export function useFileOperations(
     activeFolderId: number | null,
+    activeTopicId: number | null,
     selectedIds: number[],
     setSelectedIds: (ids: number[]) => void,
     displayedFiles: TelegramFile[]
@@ -31,9 +32,9 @@ export function useFileOperations(
         toast.loading("Deleting file...", { id: toastId });
 
         try {
-            await api.deleteFile(id, activeFolderId);
+            await api.deleteFile(id, activeFolderId, activeTopicId);
             setDeleteProgress({ done: 1, total: 1 });
-            queryClient.invalidateQueries({ queryKey: ['files', activeFolderId] });
+            queryClient.invalidateQueries({ queryKey: ['files', activeFolderId, activeTopicId] });
             toast.success("File deleted", { id: toastId });
         } catch (e) {
             toast.error(`Delete failed: ${e}`, { id: toastId });
@@ -64,7 +65,7 @@ export function useFileOperations(
 
         for (const id of selectedIds) {
             try {
-                await api.deleteFile(id, activeFolderId);
+                await api.deleteFile(id, activeFolderId, activeTopicId);
                 success++;
             } catch {
                 fail++;
@@ -76,7 +77,7 @@ export function useFileOperations(
         }
 
         setSelectedIds([]);
-        queryClient.invalidateQueries({ queryKey: ['files', activeFolderId] });
+        queryClient.invalidateQueries({ queryKey: ['files', activeFolderId, activeTopicId] });
 
         if (fail === 0) {
             toast.success(`Deleted ${success} files.`, { id: toastId });
@@ -92,7 +93,7 @@ export function useFileOperations(
 
     /** Trigger a browser download via a hidden <a> tag */
     const handleDownload = async (_id: number, name: string) => {
-        const url = downloadFileUrl(_id, activeFolderId);
+        const url = downloadFileUrl(_id, activeFolderId, activeTopicId);
         const a = document.createElement('a');
         a.href = url;
         a.download = name;
@@ -106,7 +107,7 @@ export function useFileOperations(
         if (selectedIds.length === 0) return;
         const targetFiles = displayedFiles.filter((f) => selectedIds.includes(f.id));
         for (const file of targetFiles) {
-            const url = downloadFileUrl(file.id, activeFolderId);
+            const url = downloadFileUrl(file.id, activeFolderId, activeTopicId);
             const a = document.createElement('a');
             a.href = url;
             a.download = file.name;
@@ -121,9 +122,11 @@ export function useFileOperations(
     const handleBulkMove = async (targetFolderId: number | null, onSuccess?: () => void) => {
         if (selectedIds.length === 0) return;
         try {
-            await api.moveFiles(selectedIds, activeFolderId, targetFolderId);
+            await api.moveFiles(selectedIds, activeFolderId, targetFolderId, {
+                sourceTopicId: activeTopicId,
+            });
             toast.success(`Moved ${selectedIds.length} files.`);
-            queryClient.invalidateQueries({ queryKey: ['files', activeFolderId] });
+            queryClient.invalidateQueries({ queryKey: ['files', activeFolderId, activeTopicId] });
             setSelectedIds([]);
             if (onSuccess) onSuccess();
         } catch {
@@ -137,7 +140,7 @@ export function useFileOperations(
             return;
         }
         for (const file of displayedFiles) {
-            const url = downloadFileUrl(file.id, activeFolderId);
+            const url = downloadFileUrl(file.id, activeFolderId, activeTopicId);
             const a = document.createElement('a');
             a.href = url;
             a.download = file.name;
@@ -145,7 +148,7 @@ export function useFileOperations(
             a.click();
             a.remove();
         }
-        toast.info(`Started download of ${displayedFiles.length} files from folder`);
+            toast.info(`Started download of ${displayedFiles.length} files from folder`);
     }
 
     return {

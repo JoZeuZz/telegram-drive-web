@@ -9,7 +9,7 @@ export function BandwidthWidget({ bandwidth }: BandwidthWidgetProps) {
     if (!bandwidth) return null;
 
     const totalBytes = bandwidth.up_bytes + bandwidth.down_bytes;
-    const limit = 250 * 1024 * 1024 * 1024; // 250GB
+    const limit = bandwidth.limit_bytes ?? (250 * 1024 * 1024 * 1024);
     const percent = Math.min((totalBytes / limit) * 100, 100);
 
     return (
@@ -25,7 +25,7 @@ export function BandwidthWidget({ bandwidth }: BandwidthWidgetProps) {
             </div>
             <div className="flex justify-between text-[10px] opacity-70">
                 <span>{formatBytes(totalBytes)}</span>
-                <span>250 GB</span>
+                <span>{formatBytes(limit)}</span>
             </div>
         </div>
     );

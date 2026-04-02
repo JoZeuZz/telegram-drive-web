@@ -139,7 +139,10 @@ impl UploadProgressManager {
         self.read_entries().get(upload_id).cloned()
     }
 
-    pub fn subscribe(&self, upload_id: &str) -> Option<broadcast::Receiver<UploadProgressSnapshot>> {
+    pub fn subscribe(
+        &self,
+        upload_id: &str,
+    ) -> Option<broadcast::Receiver<UploadProgressSnapshot>> {
         if !self.read_entries().contains_key(upload_id) {
             return None;
         }
@@ -191,8 +194,12 @@ impl UploadProgressManager {
         });
     }
 
-    fn read_entries(&self) -> std::sync::RwLockReadGuard<'_, HashMap<String, UploadProgressSnapshot>> {
-        self.entries.read().unwrap_or_else(|poisoned| poisoned.into_inner())
+    fn read_entries(
+        &self,
+    ) -> std::sync::RwLockReadGuard<'_, HashMap<String, UploadProgressSnapshot>> {
+        self.entries
+            .read()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
     }
 
     fn write_entries(
@@ -205,7 +212,8 @@ impl UploadProgressManager {
 
     fn read_channels(
         &self,
-    ) -> std::sync::RwLockReadGuard<'_, HashMap<String, broadcast::Sender<UploadProgressSnapshot>>> {
+    ) -> std::sync::RwLockReadGuard<'_, HashMap<String, broadcast::Sender<UploadProgressSnapshot>>>
+    {
         self.channels
             .read()
             .unwrap_or_else(|poisoned| poisoned.into_inner())
@@ -213,7 +221,8 @@ impl UploadProgressManager {
 
     fn write_channels(
         &self,
-    ) -> std::sync::RwLockWriteGuard<'_, HashMap<String, broadcast::Sender<UploadProgressSnapshot>>> {
+    ) -> std::sync::RwLockWriteGuard<'_, HashMap<String, broadcast::Sender<UploadProgressSnapshot>>>
+    {
         self.channels
             .write()
             .unwrap_or_else(|poisoned| poisoned.into_inner())

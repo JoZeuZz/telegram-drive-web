@@ -88,6 +88,23 @@ export interface TelegramFolder {
   parent_id: number | null;
 }
 
+export interface Forum {
+  id: number;
+  name: string;
+}
+
+export interface ForumTopic {
+  id: number;
+  forum_id: number;
+  title: string;
+  icon_color: number;
+  icon_emoji_id: number | null;
+  closed: boolean;
+  hidden: boolean;
+  pinned: boolean;
+  top_message: number;
+}
+
 export interface FolderSyncSummary {
   resolved_by_title: number;
   resolved_by_about: number;
@@ -100,10 +117,25 @@ export interface FolderSyncResponse {
   summary: FolderSyncSummary;
 }
 
+export interface ListForumsResponse {
+  forums: Forum[];
+}
+
+export interface ListForumTopicsResponse {
+  topics: ForumTopic[];
+}
+
+export type AccountTier = "free" | "premium";
+
 export interface BandwidthStats {
   date: string;
   up_bytes: number;
   down_bytes: number;
+  limit_bytes?: number;
+  remaining_bytes?: number;
+  tier?: AccountTier;
+  dynamic_limits_enabled?: boolean;
+  fallback_mode?: boolean;
 }
 
 export interface MetricsResponse {
@@ -111,9 +143,42 @@ export interface MetricsResponse {
   cache_bytes: number;
   cache_files: number;
   max_file_size_bytes: number;
+  max_file_size_tier?: AccountTier;
+  dynamic_limits_enabled?: boolean;
+  fallback_mode?: boolean;
+  telegram_account_cached?: boolean;
   bandwidth: BandwidthStats;
   telegram_connected: boolean;
   upload_queue_length: number;
+}
+
+export interface AccountInfoProfile {
+  user_id: number;
+  first_name: string | null;
+  last_name: string | null;
+  username: string | null;
+  phone: string | null;
+  is_premium: boolean;
+  checked_at_unix_ms: number;
+}
+
+export interface AccountInfoResponse {
+  authenticated: boolean;
+  dynamic_limits_enabled: boolean;
+  fallback_mode: boolean;
+  tier: AccountTier;
+  limits: {
+    file_size_limit_bytes: number;
+    daily_bandwidth_limit_bytes: number;
+  };
+  bandwidth: {
+    date: string;
+    up_bytes: number;
+    down_bytes: number;
+    limit_bytes: number;
+    remaining_bytes: number;
+  };
+  profile: AccountInfoProfile | null;
 }
 
 export interface UploadJob {
@@ -146,10 +211,18 @@ export interface UploadProgressSnapshot {
 export interface UploadFileOptions {
   queue?: boolean;
   asPhoto?: boolean;
+  topicId?: number;
+  topicTopMessage?: number;
   signal?: AbortSignal;
   uploadId?: string;
   uploadSizeBytes?: number;
   onProgress?: (loaded: number, total: number) => void;
+}
+
+export interface MoveFilesOptions {
+  sourceTopicId?: number | null;
+  targetTopicId?: number | null;
+  targetTopicTopMessage?: number | null;
 }
 
 // ─── public endpoints ───────────────────────────────────────────────
@@ -197,13 +270,30 @@ export const telegramLogout = () =>
 
 // ─── files ──────────────────────────────────────────────────────────
 
-export const listFiles = (folderId: number | null) => {
-  const qs = folderId != null ? `?folder_id=${folderId}` : "";
+export const listFiles = (
+  folderId: number | null,
+  topicId?: number | null,
+  topicTopMessage?: number | null,
+) => {
+  const params = new URLSearchParams();
+  if (folderId != null) params.set("folder_id", String(folderId));
+  if (topicId != null) params.set("topic_id", String(topicId));
+  if (topicTopMessage != null) {
+    params.set("topic_top_message", String(topicTopMessage));
+  }
+  const qs = params.toString() ? `?${params.toString()}` : "";
   return request<TelegramFile[]>(`/files${qs}`);
 };
 
-export const deleteFile = (messageId: number, folderId: number | null) => {
-  const qs = folderId != null ? `?folder_id=${folderId}` : "";
+export const deleteFile = (
+  messageId: number,
+  folderId: number | null,
+  topicId?: number | null,
+) => {
+  const params = new URLSearchParams();
+  if (folderId != null) params.set("folder_id", String(folderId));
+  if (topicId != null) params.set("topic_id", String(topicId));
+  const qs = params.toString() ? `?${params.toString()}` : "";
   return request<{ success: boolean }>(`/files/${messageId}${qs}`, {
     method: "DELETE",
   });
@@ -213,6 +303,7 @@ export const moveFiles = (
   messageIds: number[],
   sourceFolderId: number | null,
   targetFolderId: number | null,
+  options: MoveFilesOptions = {},
 ) =>
   request<{ success: boolean }>(
     "/files/move",
@@ -220,6 +311,9 @@ export const moveFiles = (
       message_ids: messageIds,
       source_folder_id: sourceFolderId,
       target_folder_id: targetFolderId,
+      source_topic_id: options.sourceTopicId,
+      target_topic_id: options.targetTopicId,
+      target_topic_top_message: options.targetTopicTopMessage,
     }),
   );
 
@@ -236,6 +330,10 @@ export const uploadFile = async (
   fd.append("file", file);
   const qs = new URLSearchParams();
   if (folderId != null) qs.set("folder_id", String(folderId));
+  if (options.topicId != null) qs.set("topic_id", String(options.topicId));
+  if (options.topicTopMessage != null) {
+    qs.set("topic_top_message", String(options.topicTopMessage));
+  }
   if (queue) qs.set("queue", "true");
   qs.set("as_photo", asPhoto ? "true" : "false");
   if (options.uploadId) qs.set("upload_id", options.uploadId);
@@ -304,8 +402,12 @@ export const uploadFile = async (
 export const downloadFileUrl = (
   messageId: number,
   folderId: number | null,
+  topicId?: number | null,
 ) => {
-  const qs = folderId != null ? `?folder_id=${folderId}` : "";
+  const params = new URLSearchParams();
+  if (folderId != null) params.set("folder_id", String(folderId));
+  if (topicId != null) params.set("topic_id", String(topicId));
+  const qs = params.toString() ? `?${params.toString()}` : "";
   return `${BASE}/files/${messageId}/download${qs}`;
 };
 
@@ -324,6 +426,49 @@ export const deleteFolder = (folderId: number) =>
     method: "DELETE",
   });
 
+// ─── forums / communities ─────────────────────────────────────────
+
+export const listForums = () => request<ListForumsResponse>("/forums");
+
+export const createForum = (name: string) =>
+  request<Forum>("/forums", json({ name }));
+
+export const deleteForum = (forumId: number) =>
+  request<{ success: boolean }>(`/forums/${forumId}`, { method: "DELETE" });
+
+export const listForumTopics = (forumId: number) =>
+  request<ListForumTopicsResponse>(`/forums/${forumId}/topics`);
+
+export const createForumTopic = (
+  forumId: number,
+  title: string,
+  iconColor?: number,
+  iconEmojiId?: number,
+) =>
+  request<ForumTopic>(
+    `/forums/${forumId}/topics`,
+    json({
+      title,
+      icon_color: iconColor,
+      icon_emoji_id: iconEmojiId,
+    }),
+  );
+
+export const deleteForumTopic = (
+  forumId: number,
+  topicId: number,
+  topMessage?: number | null,
+) => {
+  const params = new URLSearchParams();
+  if (topMessage != null) params.set("top_message", String(topMessage));
+  const qs = params.toString() ? `?${params.toString()}` : "";
+
+  return request<{ success: boolean }>(
+    `/forums/${forumId}/topics/${topicId}${qs}`,
+    { method: "DELETE" },
+  );
+};
+
 // ─── search ─────────────────────────────────────────────────────────
 
 export const searchFiles = (query: string) =>
@@ -331,18 +476,39 @@ export const searchFiles = (query: string) =>
 
 // ─── media ──────────────────────────────────────────────────────────
 
-export const streamUrl = (messageId: number, folderId: number | null) => {
-  const qs = folderId != null ? `?folder_id=${folderId}` : "";
+export const streamUrl = (
+  messageId: number,
+  folderId: number | null,
+  topicId?: number | null,
+) => {
+  const params = new URLSearchParams();
+  if (folderId != null) params.set("folder_id", String(folderId));
+  if (topicId != null) params.set("topic_id", String(topicId));
+  const qs = params.toString() ? `?${params.toString()}` : "";
   return `${BASE}/media/stream/${messageId}${qs}`;
 };
 
-export const previewUrl = (messageId: number, folderId: number | null) => {
-  const qs = folderId != null ? `?folder_id=${folderId}` : "";
+export const previewUrl = (
+  messageId: number,
+  folderId: number | null,
+  topicId?: number | null,
+) => {
+  const params = new URLSearchParams();
+  if (folderId != null) params.set("folder_id", String(folderId));
+  if (topicId != null) params.set("topic_id", String(topicId));
+  const qs = params.toString() ? `?${params.toString()}` : "";
   return `${BASE}/media/preview/${messageId}${qs}`;
 };
 
-export const thumbnailUrl = (messageId: number, folderId: number | null) => {
-  const qs = folderId != null ? `?folder_id=${folderId}` : "";
+export const thumbnailUrl = (
+  messageId: number,
+  folderId: number | null,
+  topicId?: number | null,
+) => {
+  const params = new URLSearchParams();
+  if (folderId != null) params.set("folder_id", String(folderId));
+  if (topicId != null) params.set("topic_id", String(topicId));
+  const qs = params.toString() ? `?${params.toString()}` : "";
   return `${BASE}/media/thumbnail/${messageId}${qs}`;
 };
 
@@ -351,6 +517,8 @@ export const thumbnailUrl = (messageId: number, folderId: number | null) => {
 export const getBandwidth = () => request<BandwidthStats>("/bandwidth");
 
 export const getMetrics = () => request<MetricsResponse>("/metrics");
+
+export const getAccountInfo = () => request<AccountInfoResponse>("/account-info");
 
 // ─── upload queue ───────────────────────────────────────────────────
 

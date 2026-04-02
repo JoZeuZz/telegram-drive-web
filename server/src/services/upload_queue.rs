@@ -16,6 +16,8 @@ pub struct UploadJob {
     pub file_name: String,
     pub content_type: Option<String>,
     pub folder_id: Option<i64>,
+    pub topic_id: Option<i32>,
+    pub topic_top_message: Option<i32>,
     pub size: u64,
     pub as_photo: bool,
 }
@@ -38,6 +40,8 @@ pub struct JobEntry {
     pub file_name: String,
     pub size: u64,
     pub folder_id: Option<i64>,
+    pub topic_id: Option<i32>,
+    pub topic_top_message: Option<i32>,
     pub status: JobStatus,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
@@ -76,6 +80,8 @@ impl UploadQueue {
             file_name: job.file_name.clone(),
             size: job.size,
             folder_id: job.folder_id,
+            topic_id: job.topic_id,
+            topic_top_message: job.topic_top_message,
             status: JobStatus::Queued,
             error: None,
         };
@@ -167,6 +173,8 @@ impl UploadQueue {
                     &bw,
                     &job.file_path,
                     job.folder_id,
+                    job.topic_id,
+                    job.topic_top_message,
                     &job.file_name,
                     job.content_type.as_deref(),
                     job.as_photo,

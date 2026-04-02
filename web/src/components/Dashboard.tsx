@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { AnimatePresence } from 'framer-motion';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
@@ -8,7 +8,7 @@ import { TelegramFile } from '../types';
 import { formatBytes } from '../utils';
 
 // Components
-import { Sidebar } from './dashboard/Sidebar';
+import { Sidebar, type SidebarDropTarget } from './dashboard/Sidebar';
 import { TopBar } from './dashboard/TopBar';
 import { FileExplorer } from './dashboard/FileExplorer';
 import { UploadQueue } from './dashboard/UploadQueue';
@@ -31,7 +31,7 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
 
 
     const {
-        folders, activeFolderId, setActiveFolderId, isSyncing, isConnected,
+        folders, activeFolderId, setActiveFolderId: setActiveFolderIdRaw, isSyncing, isConnected,
         lastSyncSummary, handleLogout, handleSyncFolders, handleCreateFolder, handleFolderDelete
     } = useTelegramConnection(onLogout);
 
@@ -59,6 +59,12 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
     const [playingFile, setPlayingFile] = useState<TelegramFile | null>(null);
     const [previewContextFiles, setPreviewContextFiles] = useState<TelegramFile[]>([]);
     const [previewContextIndex, setPreviewContextIndex] = useState(-1);
+    const [activeStructuredTopic, setActiveStructuredTopic] = useState<{
+        forumId: number;
+        topicId: number;
+        title: string;
+        topMessage: number | null;
+    } | null>(null);
 
     useEffect(() => {
         const saved = localStorage.getItem('viewMode') as 'grid' | 'list' | null;
@@ -69,19 +75,129 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
         localStorage.setItem('viewMode', viewMode);
     }, [viewMode]);
 
+    const setActiveFolderId = useCallback((id: number | null) => {
+        setActiveStructuredTopic(null);
+        setActiveFolderIdRaw(id);
+    }, [setActiveFolderIdRaw]);
 
-    const { data: allFiles = [], isLoading, error } = useQuery<TelegramFile[]>({
-        queryKey: ['files', activeFolderId],
-        queryFn: () => api.listFiles(activeFolderId).then(res => res.map(f => ({
-            ...f,
-            sizeStr: formatBytes(f.size),
-            type: (f.icon_type || (f.name.endsWith('/') ? 'folder' : 'file')) as 'file' | 'folder',
-        }))),
+    const openStructuredTopic = useCallback((
+        forumId: number,
+        topicId: number,
+        title: string,
+        topMessage?: number | null,
+    ) => {
+        setActiveFolderIdRaw(forumId);
+        setActiveStructuredTopic({
+            forumId,
+            topicId,
+            title,
+            topMessage: topMessage ?? null,
+        });
+    }, [setActiveFolderIdRaw]);
+
+
+    const folderIdSet = useMemo(() => new Set(folders.map((folder) => folder.id)), [folders]);
+
+    const { data: structuredFoldersResponse } = useQuery({
+        queryKey: ['structured-folders'],
+        queryFn: () => api.listForums(),
+        enabled: isConnected,
+        staleTime: 30_000,
+        refetchOnWindowFocus: false,
     });
 
-    const displayedFiles = searchTerm.length > 2
+    const structuredFolderById = useMemo(() => {
+        return new Map((structuredFoldersResponse?.forums ?? []).map((forum) => [forum.id, forum]));
+    }, [structuredFoldersResponse]);
+
+    const activeStructuredFolder = useMemo(() => {
+        if (activeFolderId === null) return null;
+        if (folderIdSet.has(activeFolderId)) return null;
+        return structuredFolderById.get(activeFolderId) ?? null;
+    }, [activeFolderId, folderIdSet, structuredFolderById]);
+
+    useEffect(() => {
+        if (!activeStructuredTopic) return;
+        if (activeFolderId !== activeStructuredTopic.forumId) {
+            setActiveStructuredTopic(null);
+        }
+    }, [activeFolderId, activeStructuredTopic]);
+
+    const isLegacyFolderView = activeFolderId === null || folderIdSet.has(activeFolderId);
+    const isStructuredTopicView = !isLegacyFolderView
+        && activeStructuredTopic !== null
+        && activeStructuredTopic.forumId === activeFolderId;
+    const isStructuredRootView = !isLegacyFolderView && !isStructuredTopicView;
+    const activeTopicId = isStructuredTopicView ? activeStructuredTopic?.topicId ?? null : null;
+
+    const {
+        data: structuredTopics = [],
+        isLoading: structuredTopicsLoading,
+        error: structuredTopicsError,
+    } = useQuery<api.ForumTopic[]>({
+        queryKey: ['structured-folder-topics', activeStructuredFolder?.id],
+        enabled: activeStructuredFolder !== null && isStructuredRootView,
+        queryFn: async () => {
+            if (!activeStructuredFolder) return [];
+
+            const response = await api.listForumTopics(activeStructuredFolder.id);
+            return response.topics;
+        },
+        staleTime: 15_000,
+        refetchOnWindowFocus: false,
+    });
+
+    const structuredTopicFiles = useMemo<TelegramFile[]>(() => {
+        return structuredTopics.map((topic) => ({
+                id: topic.id,
+                name: topic.title,
+                size: 0,
+                sizeStr: 'Structured subfolder',
+                created_at: undefined,
+                type: 'folder' as const,
+                folder_id: activeStructuredFolder?.id ?? null,
+            }));
+    }, [structuredTopics, activeStructuredFolder?.id]);
+
+    const structuredTopicTitleById = useMemo(
+        () => new Map<number, string>(structuredTopics.map((topic) => [topic.id, topic.title])),
+        [structuredTopics],
+    );
+
+    const structuredTopicTopMessageById = useMemo(
+        () => new Map<number, number>(structuredTopics.map((topic) => [topic.id, topic.top_message])),
+        [structuredTopics],
+    );
+
+    const activeTopicTopMessage = useMemo(() => {
+        if (!isStructuredTopicView || !activeStructuredTopic) return null;
+
+        if (activeStructuredTopic.topMessage && activeStructuredTopic.topMessage > 0) {
+            return activeStructuredTopic.topMessage;
+        }
+
+        return structuredTopicTopMessageById.get(activeStructuredTopic.topicId) ?? null;
+    }, [isStructuredTopicView, activeStructuredTopic, structuredTopicTopMessageById]);
+
+    const { data: allFiles = [], isLoading: filesLoading, error: filesError } = useQuery<TelegramFile[]>({
+        queryKey: ['files', activeFolderId, activeTopicId, activeTopicTopMessage],
+        queryFn: async () => {
+            if (isStructuredRootView) return [];
+
+            const res = await api.listFiles(activeFolderId, activeTopicId, activeTopicTopMessage);
+            return res.map((f) => ({
+                ...f,
+                sizeStr: formatBytes(f.size),
+                type: (f.icon_type || (f.name.endsWith('/') ? 'folder' : 'file')) as 'file' | 'folder',
+            }));
+        },
+    });
+
+    const visibleBaseFiles = isStructuredRootView ? structuredTopicFiles : allFiles;
+
+    const displayedFiles = searchTerm.length > 2 && isLegacyFolderView
         ? searchResults
-        : allFiles.filter((f: TelegramFile) => f.name.toLowerCase().includes(searchTerm.toLowerCase()));
+        : visibleBaseFiles.filter((f: TelegramFile) => f.name.toLowerCase().includes(searchTerm.toLowerCase()));
 
     useEffect(() => {
         const onVisibilityChange = () => {
@@ -102,6 +218,14 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
         refetchOnWindowFocus: false,
     });
 
+    const { data: accountInfo } = useQuery({
+        queryKey: ['account-info'],
+        queryFn: () => api.getAccountInfo(),
+        enabled: isWindowVisible,
+        refetchInterval: isWindowVisible ? 30_000 : false,
+        refetchOnWindowFocus: false,
+    });
+
     const { data: metrics } = useQuery({
         queryKey: ['metrics'],
         queryFn: () => api.getMetrics(),
@@ -115,16 +239,20 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
         handleDelete, handleBulkDelete, handleDownload, handleBulkDownload,
         handleBulkMove, handleDownloadFolder, handleGlobalSearch, isDeleting, deleteProgress
 
-    } = useFileOperations(activeFolderId, selectedIds, setSelectedIds, displayedFiles);
+    } = useFileOperations(activeFolderId, activeTopicId, selectedIds, setSelectedIds, displayedFiles);
 
     const { uploadQueue, setUploadQueue, cancelQueueItem, handleManualUpload, isDragging } = useFileUpload(
         activeFolderId,
+        activeTopicId,
+        activeTopicTopMessage,
         metrics?.max_file_size_bytes,
     );
     const { downloadQueue, clearFinished: clearDownloads } = useFileDownload();
 
 
     const handleSelectAll = useCallback(() => {
+        if (isStructuredRootView) return;
+
         const ids = visibleOrderedIds.length > 0
             ? visibleOrderedIds
             : displayedFiles.map((f) => f.id);
@@ -132,13 +260,18 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
         setSelectedIds(ids);
         setSelectionAnchorId(ids[0] ?? null);
         setSelectionFocusId(ids[ids.length - 1] ?? null);
-    }, [visibleOrderedIds, displayedFiles]);
+    }, [visibleOrderedIds, displayedFiles, isStructuredRootView]);
 
     const handleKeyboardDelete = useCallback(() => {
+        if (isStructuredRootView) {
+            toast.info('Open a structured subfolder to manage files.');
+            return;
+        }
+
         if (selectedIds.length > 0) {
             handleBulkDelete();
         }
-    }, [selectedIds, handleBulkDelete]);
+    }, [selectedIds, handleBulkDelete, isStructuredRootView]);
 
     const handleEscape = useCallback(() => {
         setSelectedIds([]);
@@ -187,13 +320,32 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
             const selected = displayedFiles.find(f => f.id === selectedIds[0]);
             if (selected) {
                 if (selected.type === 'folder') {
-                    setActiveFolderId(selected.id);
+                    if (isStructuredRootView) {
+                        if (activeStructuredFolder) {
+                            openStructuredTopic(
+                                activeStructuredFolder.id,
+                                selected.id,
+                                selected.name,
+                                structuredTopicTopMessageById.get(selected.id) ?? null,
+                            );
+                        }
+                    } else {
+                        setActiveFolderId(selected.id);
+                    }
                 } else {
                     handlePreview(selected, displayedFiles);
                 }
             }
         }
-    }, [selectedIds, displayedFiles, setActiveFolderId]);
+    }, [
+        selectedIds,
+        displayedFiles,
+        setActiveFolderId,
+        isStructuredRootView,
+        activeStructuredFolder,
+        structuredTopicTopMessageById,
+        openStructuredTopic,
+    ]);
 
     useKeyboardShortcuts({
         onSelectAll: handleSelectAll,
@@ -218,11 +370,11 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
         setSelectionAnchorId(null);
         setSelectionFocusId(null);
         setVisibleOrderedIds([]);
-    }, [activeFolderId]);
+    }, [activeFolderId, activeTopicId]);
 
 
     useEffect(() => {
-        if (searchTerm.length <= 2) {
+        if (!isLegacyFolderView || searchTerm.length <= 2) {
             setSearchResults([]);
             return;
         }
@@ -239,13 +391,26 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
         }, 500);
 
         return () => clearTimeout(timer);
-    }, [searchTerm]);
+    }, [searchTerm, isLegacyFolderView]);
 
 
 
 
     const handleFileClick = (e: React.MouseEvent, id: number, orderedIds: number[]) => {
         e.stopPropagation();
+
+        if (isStructuredRootView && activeStructuredFolder) {
+            const topicTitle = structuredTopicTitleById.get(id);
+            if (topicTitle) {
+                openStructuredTopic(
+                    activeStructuredFolder.id,
+                    id,
+                    topicTitle,
+                    structuredTopicTopMessageById.get(id) ?? null,
+                );
+                return;
+            }
+        }
 
         const useOrderedIds = orderedIds.length > 0 ? orderedIds : visibleOrderedIds;
         const isMod = e.metaKey || e.ctrlKey;
@@ -363,13 +528,16 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
         };
     }, [previewContextFiles, previewFile, playingFile]);
 
-    const handleDropOnFolder = async (e: React.DragEvent, targetFolderId: number | null) => {
+    const handleDropOnTarget = useCallback(async (e: React.DragEvent, target: SidebarDropTarget) => {
         e.preventDefault();
         e.stopPropagation();
 
         const dataTransferFileId = e.dataTransfer.getData("application/x-telegram-file-id");
+        const targetTopicId = target.topicId ?? null;
 
-        if (activeFolderId === targetFolderId) return;
+        if (activeFolderId === target.folderId && (activeTopicId ?? null) === targetTopicId) {
+            return;
+        }
 
         const fileId = internalDragRef.current || (dataTransferFileId ? parseInt(dataTransferFileId) : null);
 
@@ -377,24 +545,96 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
             try {
                 const idsToMove = selectedIds.includes(fileId) ? selectedIds : [fileId];
 
-                await api.moveFiles(idsToMove, activeFolderId, targetFolderId);
+                await api.moveFiles(idsToMove, activeFolderId, target.folderId, {
+                    sourceTopicId: activeTopicId,
+                    targetTopicId,
+                    targetTopicTopMessage: target.topicTopMessage ?? null,
+                });
 
-                queryClient.invalidateQueries({ queryKey: ['files', activeFolderId] });
+                queryClient.invalidateQueries({ queryKey: ['files', activeFolderId, activeTopicId] });
+                queryClient.invalidateQueries({ queryKey: ['files', target.folderId, targetTopicId] });
 
                 if (selectedIds.includes(fileId)) setSelectedIds([]);
 
-                toast.success(`Moved ${idsToMove.length} file(s).`);
+                if (target.label) {
+                    toast.success(`Moved ${idsToMove.length} file(s) to ${target.label}.`);
+                } else {
+                    toast.success(`Moved ${idsToMove.length} file(s).`);
+                }
 
                 setInternalDragFileId(null);
             } catch {
                 toast.error(`Failed to move file(s).`);
             }
         }
-    }
+    }, [activeFolderId, activeTopicId, queryClient, selectedIds]);
+
+    const handleDropOnLegacyFolder = useCallback((e: React.DragEvent, targetFolderId: number) => {
+        void handleDropOnTarget(e, { folderId: targetFolderId });
+    }, [handleDropOnTarget]);
+
+    const notifyStructuredViewAction = useCallback(() => {
+        toast.info('Open a structured subfolder to explore and upload files.');
+    }, []);
+
+    const handleManualUploadInView = useCallback(() => {
+        if (isStructuredRootView) {
+            notifyStructuredViewAction();
+            return;
+        }
+        handleManualUpload();
+    }, [isStructuredRootView, notifyStructuredViewAction, handleManualUpload]);
+
+    const handleDeleteInView = useCallback((id: number) => {
+        if (isStructuredRootView) {
+            notifyStructuredViewAction();
+            return;
+        }
+        void handleDelete(id);
+    }, [isStructuredRootView, notifyStructuredViewAction, handleDelete]);
+
+    const handleDownloadInView = useCallback((id: number, name: string) => {
+        if (isStructuredRootView) {
+            notifyStructuredViewAction();
+            return;
+        }
+        void handleDownload(id, name);
+    }, [isStructuredRootView, notifyStructuredViewAction, handleDownload]);
+
+    const handlePreviewInView = useCallback((file: TelegramFile, orderedFiles?: TelegramFile[]) => {
+        if (isStructuredRootView) {
+            notifyStructuredViewAction();
+            return;
+        }
+        handlePreview(file, orderedFiles);
+    }, [isStructuredRootView, notifyStructuredViewAction, handlePreview]);
+
+    const handleDownloadFolderInView = useCallback(() => {
+        if (isStructuredRootView) {
+            notifyStructuredViewAction();
+            return;
+        }
+        void handleDownloadFolder();
+    }, [isStructuredRootView, notifyStructuredViewAction, handleDownloadFolder]);
+
+    const explorerLoading = isStructuredRootView
+        ? structuredTopicsLoading
+        : (filesLoading || (isLegacyFolderView && isSearching));
+
+    const explorerError = isStructuredRootView
+        ? (structuredTopicsError instanceof Error ? structuredTopicsError : null)
+        : (filesError instanceof Error ? filesError : null);
+
+    const showStructuredEmptyState = isStructuredRootView
+        && !explorerLoading
+        && !explorerError
+        && displayedFiles.length === 0;
 
     const currentFolderName = activeFolderId === null
         ? "Saved Messages"
-        : folders.find(f => f.id === activeFolderId)?.name || "Folder";
+        : isStructuredTopicView && activeStructuredTopic
+            ? `${activeStructuredFolder?.name || 'Structured folder'} / ${activeStructuredTopic.title}`
+            : folders.find(f => f.id === activeFolderId)?.name || activeStructuredFolder?.name || "Folder";
 
 
     const handleRootDragOver = (e: React.DragEvent) => {
@@ -423,7 +663,7 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
             onDragEnter={handleRootDragEnter}
         >
 
-            <ExternalDropBlocker onUploadClick={handleManualUpload} />
+            <ExternalDropBlocker onUploadClick={handleManualUploadInView} />
 
             <AnimatePresence>
                 {showMoveModal && (
@@ -453,8 +693,10 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
             <Sidebar
                 folders={folders}
                 activeFolderId={activeFolderId}
+                activeStructuredTopicId={activeTopicId}
                 setActiveFolderId={setActiveFolderId}
-                onDrop={handleDropOnFolder}
+                onOpenStructuredTopic={openStructuredTopic}
+                onDrop={handleDropOnTarget}
                 onDelete={handleFolderDelete}
                 onCreate={handleCreateFolder}
                 isSyncing={isSyncing}
@@ -472,40 +714,47 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
                     onShowMoveModal={() => setShowMoveModal(true)}
                     onBulkDownload={handleBulkDownload}
                     onBulkDelete={handleBulkDelete}
-                    onDownloadFolder={handleDownloadFolder}
+                    onDownloadFolder={handleDownloadFolderInView}
                     isDeleting={isDeleting}
                     deleteProgress={deleteProgress}
                     viewMode={viewMode}
                     setViewMode={setViewMode}
                     searchTerm={searchTerm}
                     onSearchChange={setSearchTerm}
+                    accountTier={accountInfo?.tier ?? null}
+                    disableFileActions={isStructuredRootView}
                 />
-                {searchTerm.length > 2 && (
+                {searchTerm.length > 2 && isLegacyFolderView && (
                     <div className="px-6 pt-4 pb-0">
                         <h2 className="text-sm font-medium text-telegram-subtext">
                             Search Results for <span className="text-telegram-primary">"{searchTerm}"</span>
                         </h2>
                     </div>
                 )}
-                <FileExplorer
-
-                    files={displayedFiles}
-                    loading={isLoading || isSearching}
-                    error={error}
-                    viewMode={viewMode}
-                    selectedIds={selectedIds}
-                    activeFolderId={activeFolderId}
-                    onFileClick={handleFileClick}
-                    onVisibleOrderChange={setVisibleOrderedIds}
-                    onDelete={handleDelete}
-                    onDownload={handleDownload}
-                    onPreview={handlePreview}
-                    onManualUpload={handleManualUpload}
-                    onSelectionClear={() => setSelectedIds([])}
-                    onDrop={handleDropOnFolder}
-                    onDragStart={(fileId) => setInternalDragFileId(fileId)}
-                    onDragEnd={() => setTimeout(() => setInternalDragFileId(null), 50)}
-                />
+                {showStructuredEmptyState ? (
+                    <div className="flex-1 p-6 flex items-center justify-center text-telegram-subtext text-sm">
+                        No subfolders yet in this structured folder.
+                    </div>
+                ) : (
+                    <FileExplorer
+                        files={displayedFiles}
+                        loading={explorerLoading}
+                        error={explorerError}
+                        viewMode={viewMode}
+                        selectedIds={selectedIds}
+                        activeFolderId={activeFolderId}
+                        onFileClick={handleFileClick}
+                        onVisibleOrderChange={setVisibleOrderedIds}
+                        onDelete={handleDeleteInView}
+                        onDownload={handleDownloadInView}
+                        onPreview={handlePreviewInView}
+                        onManualUpload={handleManualUploadInView}
+                        onSelectionClear={() => setSelectedIds([])}
+                        onDrop={isStructuredRootView ? undefined : handleDropOnLegacyFolder}
+                        onDragStart={(fileId) => setInternalDragFileId(fileId)}
+                        onDragEnd={() => setTimeout(() => setInternalDragFileId(null), 50)}
+                    />
+                )}
             </main>
 
             {previewFile && (

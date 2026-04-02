@@ -111,9 +111,7 @@ fn parse_parent_id_from_title(raw_title: &str) -> Option<Option<i64>> {
 }
 
 fn is_legacy_folder_title(raw_title: &str) -> bool {
-    raw_title
-        .to_ascii_lowercase()
-        .contains(LEGACY_TITLE_MARKER)
+    raw_title.to_ascii_lowercase().contains(LEGACY_TITLE_MARKER)
 }
 
 fn strip_title_metadata(raw_title: &str) -> String {

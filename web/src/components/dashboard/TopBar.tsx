@@ -14,11 +14,15 @@ interface TopBarProps {
     setViewMode: (mode: 'grid' | 'list') => void;
     searchTerm: string;
     onSearchChange: (term: string) => void;
+    accountTier: 'free' | 'premium' | null;
+    disableFileActions?: boolean;
 }
 
 export function TopBar({
     currentFolderName, selectedIds, onShowMoveModal, onBulkDownload, onBulkDelete,
-    onDownloadFolder, isDeleting, deleteProgress, viewMode, setViewMode, searchTerm, onSearchChange
+    onDownloadFolder, isDeleting, deleteProgress, viewMode, setViewMode, searchTerm, onSearchChange,
+    accountTier,
+    disableFileActions = false,
 }: TopBarProps) {
     const { theme, toggleTheme } = useTheme();
 
@@ -43,13 +47,19 @@ export function TopBar({
             </div>
 
             <div className="flex items-center gap-2">
+                {accountTier && (
+                    <div className="mr-2 rounded-full border border-telegram-border bg-telegram-hover/70 px-2.5 py-1 text-[10px] font-semibold tracking-wide text-telegram-text uppercase">
+                        {accountTier === 'premium' ? 'Premium' : 'Free'}
+                    </div>
+                )}
+
                 {isDeleting && (
                     <div className="mr-4 px-3 py-1.5 rounded-md bg-red-500/10 border border-red-500/20 text-red-300 text-xs">
                         Deleting {deleteProgress.done}/{deleteProgress.total}
                     </div>
                 )}
 
-                {selectedIds.length > 0 && (
+                {!disableFileActions && selectedIds.length > 0 && (
                     <div className="flex items-center gap-2 mr-4 animate-in fade-in slide-in-from-top-2">
                         <span className="text-xs text-telegram-subtext mr-2">{selectedIds.length} Selected</span>
                         <button disabled={isDeleting} onClick={onShowMoveModal} className="px-3 py-1.5 bg-telegram-primary/20 hover:bg-telegram-primary/30 text-telegram-primary rounded-md text-xs transition font-medium disabled:opacity-50 disabled:cursor-not-allowed">Move to...</button>
@@ -58,7 +68,12 @@ export function TopBar({
                     </div>
                 )}
 
-                <button onClick={onDownloadFolder} className="p-2 hover:bg-telegram-hover rounded-md text-telegram-subtext hover:text-telegram-text transition group relative" title="Download Folder">
+                <button
+                    onClick={onDownloadFolder}
+                    disabled={disableFileActions}
+                    className="p-2 hover:bg-telegram-hover rounded-md text-telegram-subtext hover:text-telegram-text transition group relative disabled:cursor-not-allowed disabled:opacity-40"
+                    title={disableFileActions ? 'Unavailable in structured view' : 'Download Folder'}
+                >
                     <HardDrive className="w-5 h-5" />
                 </button>
 

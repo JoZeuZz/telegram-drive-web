@@ -82,7 +82,12 @@ function deriveProgress(
     };
 }
 
-export function useFileUpload(activeFolderId: number | null, maxFileSizeBytes?: number) {
+export function useFileUpload(
+    activeFolderId: number | null,
+    activeTopicId: number | null,
+    activeTopicTopMessage: number | null,
+    maxFileSizeBytes?: number,
+) {
     const queryClient = useQueryClient();
     const [uploadQueue, setUploadQueue] = useState<QueueItem[]>([]);
     const [processing, setProcessing] = useState(false);
@@ -280,6 +285,8 @@ export function useFileUpload(activeFolderId: number | null, maxFileSizeBytes?: 
         try {
             await api.uploadFile(item.file, item.folderId, {
                 signal: controller.signal,
+                topicId: item.topicId ?? undefined,
+                topicTopMessage: item.topicTopMessage ?? undefined,
                 uploadId: item.id,
                 uploadSizeBytes: item.file.size,
                 onProgress: (loaded: number, total: number) => {
@@ -353,7 +360,7 @@ export function useFileUpload(activeFolderId: number | null, maxFileSizeBytes?: 
                 };
             }));
 
-            queryClient.invalidateQueries({ queryKey: ['files', item.folderId] });
+            queryClient.invalidateQueries({ queryKey: ['files', item.folderId, item.topicId ?? null] });
         } catch (e) {
             if (e instanceof DOMException && e.name === 'AbortError') {
                 setUploadQueue((q) => q.map((i) => i.id === item.id
@@ -418,6 +425,8 @@ export function useFileUpload(activeFolderId: number | null, maxFileSizeBytes?: 
             id: createQueueId(),
             file,
             folderId: activeFolderId,
+            topicId: activeTopicId,
+            topicTopMessage: activeTopicTopMessage,
             status: 'pending',
             stage: 'browser_to_server',
             progressPercent: 0,
@@ -431,7 +440,7 @@ export function useFileUpload(activeFolderId: number | null, maxFileSizeBytes?: 
 
         setUploadQueue((prev) => [...prev, ...newItems]);
         toast.info(`Queued ${accepted.length} file(s) for upload`);
-    }, [activeFolderId, effectiveMaxFileSizeBytes]);
+    }, [activeFolderId, activeTopicId, activeTopicTopMessage, effectiveMaxFileSizeBytes]);
 
     const cancelQueueItem = useCallback((id: string) => {
         const target = uploadQueue.find((item) => item.id === id);

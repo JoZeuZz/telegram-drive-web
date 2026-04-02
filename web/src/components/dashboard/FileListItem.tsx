@@ -29,8 +29,13 @@ export function FileListItem({
         <div
             onClick={(e) => onFileClick(e, file.id, orderedIds)}
             onContextMenu={(e) => handleContextMenu(e, file)}
-            draggable
+            draggable={!isFolder}
             onDragStart={(e) => {
+                if (isFolder) {
+                    e.preventDefault();
+                    return;
+                }
+
                 if (onDragStart) onDragStart(file.id);
                 e.dataTransfer.setData("application/x-telegram-file-id", file.id.toString());
                 e.dataTransfer.effectAllowed = 'move';
