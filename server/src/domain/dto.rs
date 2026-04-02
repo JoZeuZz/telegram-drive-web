@@ -1,4 +1,5 @@
 // DTOs — Data Transfer Objects for HTTP request/response payloads.
+use crate::domain::models::FolderMetadata;
 use serde::{Deserialize, Serialize};
 
 // ─── App Auth ────────────────────────────────────────────
@@ -71,6 +72,12 @@ pub struct UploadQuery {
     pub folder_id: Option<i64>,
     #[serde(default)]
     pub queue: bool,
+    #[serde(default)]
+    pub as_photo: bool,
+    #[serde(default)]
+    pub upload_id: Option<String>,
+    #[serde(default)]
+    pub upload_size_bytes: Option<u64>,
 }
 
 // ─── Folders ─────────────────────────────────────────────
@@ -86,6 +93,20 @@ pub struct CreateFolderRequest {
 pub struct DeleteFolderResponse {
     pub success: bool,
     pub deleted_count: usize,
+}
+
+#[derive(Serialize)]
+pub struct FolderSyncSummaryResponse {
+    pub resolved_by_title: usize,
+    pub resolved_by_about: usize,
+    pub orphans: usize,
+    pub migrated: usize,
+}
+
+#[derive(Serialize)]
+pub struct FolderSyncResponse {
+    pub folders: Vec<FolderMetadata>,
+    pub summary: FolderSyncSummaryResponse,
 }
 
 // ─── Search ──────────────────────────────────────────────

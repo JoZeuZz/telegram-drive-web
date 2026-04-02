@@ -16,11 +16,26 @@ export interface TelegramFolder {
     parent_id: number | null;
 }
 
+export interface FolderSyncSummary {
+    resolved_by_title: number;
+    resolved_by_about: number;
+    orphans: number;
+    migrated: number;
+}
+
 export interface QueueItem {
     id: string;
     file: File;
     folderId: number | null;
-    status: 'pending' | 'uploading' | 'success' | 'error';
+    status: 'pending' | 'uploading' | 'success' | 'error' | 'cancelled';
+    stage?: 'browser_to_server' | 'server_to_telegram' | 'completed' | 'failed' | 'cancelled';
+    progressPercent?: number;
+    stageProgressPercent?: number;
+    browserToServerBytes?: number;
+    telegramUploadBytes?: number;
+    fileSizeBytes?: number;
+    uploadSpeedBps?: number;
+    etaSeconds?: number;
     error?: string;
 }
 

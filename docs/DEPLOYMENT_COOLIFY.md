@@ -30,6 +30,7 @@ Set these in Coolify (use the single contract in `.env.example` as reference):
 Optional:
 
 - `SESSION_TTL_HOURS` (default `8`)
+- `MAX_FILE_SIZE_BYTES` (default `2097152000`, ~2 GB decimal)
 - `APP_AUTH_RATE_LIMIT_MAX_REQUESTS`, `APP_AUTH_RATE_LIMIT_WINDOW_SECS`
 - `TELEGRAM_AUTH_RATE_LIMIT_MAX_REQUESTS`, `TELEGRAM_AUTH_RATE_LIMIT_WINDOW_SECS`
 - `RUST_LOG` (default `info`)

@@ -35,7 +35,7 @@ npm run dev
 ## Code style
 
 - **Rust**: run `cargo fmt` and `cargo clippy` before committing.
-- **TypeScript**: run `npm run lint` (ESLint + Prettier).
+- **TypeScript**: run `npm run build` (includes type-check via `tsc`).
 
 ## Branching
 

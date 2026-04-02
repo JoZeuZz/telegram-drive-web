@@ -1,3 +1,4 @@
+use crate::http::middleware::peer_ip::extract_peer_ip;
 use actix_web::body::BoxBody;
 use actix_web::dev::{Service, ServiceRequest, ServiceResponse, Transform};
 use actix_web::http::StatusCode;
@@ -83,7 +84,7 @@ where
     }
 
     fn call(&self, req: ServiceRequest) -> Self::Future {
-        let peer = peer_ip(&req, self.trust_proxy_headers);
+        let peer = extract_peer_ip(&req, self.trust_proxy_headers);
         let allowed = {
             let mut map = self.buckets.lock().expect("rate-limit lock poisoned");
             let now = Instant::now();
@@ -121,23 +122,9 @@ where
 }
 
 /// Extract the client IP, preferring X-Forwarded-For (set by the reverse proxy).
+#[cfg(test)]
 fn peer_ip(req: &ServiceRequest, trust_proxy_headers: bool) -> String {
-    if trust_proxy_headers {
-        if let Some(forwarded) = req
-            .headers()
-            .get("x-forwarded-for")
-            .and_then(|v| v.to_str().ok())
-            .and_then(|v| v.split(',').next())
-            .map(|s| s.trim())
-            .filter(|s| !s.is_empty() && *s != "unknown")
-        {
-            return forwarded.to_string();
-        }
-    }
-
-    req.peer_addr()
-        .map(|addr| addr.ip().to_string())
-        .unwrap_or_else(|| "unknown".to_string())
+    extract_peer_ip(req, trust_proxy_headers)
 }
 
 #[cfg(test)]

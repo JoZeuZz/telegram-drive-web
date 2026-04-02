@@ -1,24 +1,21 @@
-use std::sync::atomic::Ordering;
-use std::sync::Arc;
 use grammers_client::Client;
 use grammers_client::SignInError;
 use grammers_mtsender::SenderPool;
 use grammers_session::storages::SqliteSession;
+use std::sync::atomic::Ordering;
+use std::sync::Arc;
 use tokio::sync::oneshot;
 use tokio::time::Duration;
 
 use crate::app_state::AppState;
 use crate::domain::models::AuthResult;
-use crate::errors::{AppError, map_telegram_error};
+use crate::errors::{map_telegram_error, AppError};
 
 /// Ensures the Telegram client is initialized.
 ///
 /// Properly manages runner lifecycle to prevent stack overflow:
 /// before spawning a new runner, it signals the old runner to shutdown.
-pub async fn ensure_client_initialized(
-    state: &AppState,
-    api_id: i32,
-) -> Result<Client, AppError> {
+pub async fn ensure_client_initialized(state: &AppState, api_id: i32) -> Result<Client, AppError> {
     let mut client_guard = state.telegram_client.lock().await;
 
     if let Some(client) = client_guard.as_ref() {
@@ -37,7 +34,11 @@ pub async fn ensure_client_initialized(
     }
 
     let runner_num = state.runner_count.fetch_add(1, Ordering::SeqCst) + 1;
-    tracing::info!("Initializing Telegram Client #{} with API ID: {}", runner_num, api_id);
+    tracing::info!(
+        "Initializing Telegram Client #{} with API ID: {}",
+        runner_num,
+        api_id
+    );
 
     // Resolve session path
     std::fs::create_dir_all(&state.data_dir)
@@ -56,8 +57,9 @@ pub async fn ensure_client_initialized(
             let _ = std::fs::remove_file(format!("{}-wal", session_path_str));
             let _ = std::fs::remove_file(format!("{}-shm", session_path_str));
 
-            SqliteSession::open(&session_path)
-                .map_err(|e| AppError::Internal(format!("Failed to open session after recreation: {}", e)))?
+            SqliteSession::open(&session_path).map_err(|e| {
+                AppError::Internal(format!("Failed to open session after recreation: {}", e))
+            })?
         }
     };
 
@@ -115,7 +117,9 @@ pub async fn check_connection(state: &AppState) -> Result<bool, AppError> {
             tracing::info!("Auto-reconnect successful.");
             return Ok(true);
         } else {
-            return Err(AppError::Telegram("Reconnect succeeded but ping failed.".to_string()));
+            return Err(AppError::Telegram(
+                "Reconnect succeeded but ping failed.".to_string(),
+            ));
         }
     }
 
@@ -169,7 +173,9 @@ pub async fn request_code(
     api_hash: &str,
 ) -> Result<String, AppError> {
     if api_hash.trim().is_empty() {
-        return Err(AppError::BadRequest("API Hash cannot be empty.".to_string()));
+        return Err(AppError::BadRequest(
+            "API Hash cannot be empty.".to_string(),
+        ));
     }
 
     *state.api_id.lock().await = Some(api_id);
@@ -220,9 +226,9 @@ pub async fn sign_in(state: &AppState, code: &str) -> Result<AuthResult, AppErro
     };
 
     let token_guard = state.login_token.lock().await;
-    let login_token = token_guard
-        .as_ref()
-        .ok_or(AppError::BadRequest("No login session found (restart flow)".to_string()))?;
+    let login_token = token_guard.as_ref().ok_or(AppError::BadRequest(
+        "No login session found (restart flow)".to_string(),
+    ))?;
 
     match client.sign_in(login_token, code).await {
         Ok(_user) => {
@@ -263,7 +269,9 @@ pub async fn check_password(state: &AppState, password: &str) -> Result<AuthResu
         .lock()
         .await
         .take()
-        .ok_or(AppError::BadRequest("No password session found".to_string()))?;
+        .ok_or(AppError::BadRequest(
+            "No password session found".to_string(),
+        ))?;
 
     match client.check_password(pw_token, password).await {
         Ok(_user) => {

@@ -39,8 +39,16 @@ async fn delete_folder(
 /// POST /api/folders/sync — force rescan of Telegram folders.
 #[post("/sync")]
 async fn sync_folders(state: web::Data<AppState>) -> Result<HttpResponse, AppError> {
-    let folders = telegram_folders::scan_folders(&state).await?;
-    Ok(HttpResponse::Ok().json(folders))
+    let report = telegram_folders::scan_folders_with_report(&state).await?;
+    Ok(HttpResponse::Ok().json(FolderSyncResponse {
+        folders: report.folders,
+        summary: FolderSyncSummaryResponse {
+            resolved_by_title: report.resolved_by_title,
+            resolved_by_about: report.resolved_by_about,
+            orphans: report.orphans,
+            migrated: report.migrated,
+        },
+    }))
 }
 
 pub fn configure(cfg: &mut web::ServiceConfig) {

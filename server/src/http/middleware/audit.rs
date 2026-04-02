@@ -1,3 +1,4 @@
+use crate::http::middleware::peer_ip::extract_peer_ip;
 use actix_web::body::BoxBody;
 use actix_web::dev::{Service, ServiceRequest, ServiceResponse, Transform};
 use actix_web::Error;
@@ -6,7 +7,25 @@ use std::rc::Rc;
 
 /// Post-response middleware that emits structured audit log entries for
 /// mutating API actions (login, logout, uploads, deletes, folder ops).
-pub struct AuditLog;
+pub struct AuditLog {
+    trust_proxy_headers: bool,
+}
+
+impl AuditLog {
+    pub fn new(trust_proxy_headers: bool) -> Self {
+        Self {
+            trust_proxy_headers,
+        }
+    }
+}
+
+impl Default for AuditLog {
+    fn default() -> Self {
+        Self {
+            trust_proxy_headers: false,
+        }
+    }
+}
 
 impl<S> Transform<S, ServiceRequest> for AuditLog
 where
@@ -21,12 +40,14 @@ where
     fn new_transform(&self, service: S) -> Self::Future {
         ok(AuditLogMiddleware {
             service: Rc::new(service),
+            trust_proxy_headers: self.trust_proxy_headers,
         })
     }
 }
 
 pub struct AuditLogMiddleware<S> {
     service: Rc<S>,
+    trust_proxy_headers: bool,
 }
 
 impl<S> Service<ServiceRequest> for AuditLogMiddleware<S>
@@ -47,16 +68,7 @@ where
     fn call(&self, req: ServiceRequest) -> Self::Future {
         let method = req.method().to_string();
         let path = req.path().to_string();
-        let peer = req
-            .headers()
-            .get("x-forwarded-for")
-            .and_then(|v| v.to_str().ok())
-            .map(|s| s.split(',').next().unwrap_or("").trim().to_string())
-            .unwrap_or_else(|| {
-                req.peer_addr()
-                    .map(|a| a.ip().to_string())
-                    .unwrap_or_else(|| "unknown".into())
-            });
+        let peer = extract_peer_ip(&req, self.trust_proxy_headers);
 
         let srv = Rc::clone(&self.service);
         Box::pin(async move {

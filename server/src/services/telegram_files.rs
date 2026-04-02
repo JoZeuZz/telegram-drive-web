@@ -1,12 +1,16 @@
 use grammers_client::types::Media;
 use grammers_client::InputMessage;
 use grammers_tl_types as tl;
+use std::pin::Pin;
+use std::task::{Context, Poll};
+use tokio::io::{AsyncRead, ReadBuf};
 
 use crate::app_state::AppState;
 use crate::domain::models::FileMetadata;
-use crate::errors::{AppError, map_telegram_error};
+use crate::errors::{map_telegram_error, AppError};
 use crate::services::bandwidth::BandwidthManager;
 use crate::services::helpers::resolve_peer;
+use crate::services::upload_progress::UploadProgressReporter;
 
 /// Get the authenticated Telegram client or return an error.
 async fn require_client(state: &AppState) -> Result<grammers_client::Client, AppError> {
@@ -18,12 +22,61 @@ async fn require_client(state: &AppState) -> Result<grammers_client::Client, App
         .ok_or(AppError::Unauthorized)
 }
 
+fn sanitize_upload_name(file_name: &str) -> String {
+    let candidate = std::path::Path::new(file_name)
+        .file_name()
+        .map(|name| name.to_string_lossy().to_string())
+        .unwrap_or_else(|| "unnamed".to_string());
+
+    let trimmed = candidate.trim();
+    if trimmed.is_empty() {
+        "unnamed".to_string()
+    } else {
+        trimmed.to_string()
+    }
+}
+
+fn should_send_as_photo(file_name: &str, content_type: Option<&str>, as_photo: bool) -> bool {
+    if !as_photo {
+        return false;
+    }
+
+    if let Some(mime) = content_type {
+        if mime.trim().to_ascii_lowercase().starts_with("image/") {
+            return true;
+        }
+    }
+
+    let ext = std::path::Path::new(file_name)
+        .extension()
+        .and_then(|value| value.to_str())
+        .map(|value| value.to_ascii_lowercase());
+
+    matches!(
+        ext.as_deref(),
+        Some("jpg"
+            | "jpeg"
+            | "png"
+            | "gif"
+            | "bmp"
+            | "webp"
+            | "tif"
+            | "tiff"
+            | "heic"
+            | "heif")
+    )
+}
+
 /// Upload a file to a folder (channel) or Saved Messages.
 pub async fn upload_file(
     state: &AppState,
     bw: &BandwidthManager,
     path: &str,
     folder_id: Option<i64>,
+    file_name: &str,
+    content_type: Option<&str>,
+    as_photo: bool,
+    progress_reporter: Option<UploadProgressReporter>,
 ) -> Result<String, AppError> {
     let size = std::fs::metadata(path)
         .map_err(|e| AppError::BadRequest(format!("Cannot read file: {}", e)))?
@@ -31,18 +84,29 @@ pub async fn upload_file(
     bw.can_transfer(size)?;
 
     let client = require_client(state).await?;
+    let upload_len = usize::try_from(size)
+        .map_err(|_| AppError::BadRequest("File too large for this platform".to_string()))?;
+    let upload_name = sanitize_upload_name(file_name);
+    let upload_file = tokio::fs::File::open(path)
+        .await
+        .map_err(|e| AppError::BadRequest(format!("Cannot open file for upload: {}", e)))?;
+    let mut upload_stream = ProgressReader::new(upload_file, progress_reporter);
 
-    let path_owned = path.to_string();
-    let client_clone = client.clone();
+    let uploaded_file = client
+        .upload_stream(&mut upload_stream, upload_len, upload_name.clone())
+        .await
+        .map_err(|e| map_telegram_error(e))?;
 
-    let uploaded_file = tokio::spawn(async move {
-        client_clone.upload_file(&path_owned).await
-    })
-    .await
-    .map_err(|e| AppError::Internal(format!("Task join error: {}", e)))?
-    .map_err(|e| map_telegram_error(e))?;
+    let mut message = InputMessage::new().text("");
+    if should_send_as_photo(&upload_name, content_type, as_photo) {
+        message = message.photo(uploaded_file);
+    } else {
+        if let Some(mime) = content_type.filter(|mime| !mime.trim().is_empty()) {
+            message = message.mime_type(mime);
+        }
+        message = message.file(uploaded_file);
+    }
 
-    let message = InputMessage::new().text("").file(uploaded_file);
     let peer = resolve_peer(&client, folder_id)
         .await
         .map_err(|e| AppError::NotFound(e))?;
@@ -54,6 +118,47 @@ pub async fn upload_file(
 
     bw.add_up(size);
     Ok("File uploaded successfully".to_string())
+}
+
+struct ProgressReader<R> {
+    inner: R,
+    reporter: Option<UploadProgressReporter>,
+    bytes_read: u64,
+}
+
+impl<R> ProgressReader<R> {
+    fn new(inner: R, reporter: Option<UploadProgressReporter>) -> Self {
+        Self {
+            inner,
+            reporter,
+            bytes_read: 0,
+        }
+    }
+}
+
+impl<R: AsyncRead + Unpin> AsyncRead for ProgressReader<R> {
+    fn poll_read(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &mut ReadBuf<'_>,
+    ) -> Poll<std::io::Result<()>> {
+        let bytes_before = buf.filled().len();
+        let result = Pin::new(&mut self.inner).poll_read(cx, buf);
+
+        if let Poll::Ready(Ok(())) = &result {
+            let bytes_after = buf.filled().len();
+            if bytes_after > bytes_before {
+                self.bytes_read = self
+                    .bytes_read
+                    .saturating_add((bytes_after - bytes_before) as u64);
+                if let Some(reporter) = &self.reporter {
+                    reporter.update_telegram_bytes_nowait(self.bytes_read);
+                }
+            }
+        }
+
+        result
+    }
 }
 
 /// Delete a file (message) from a folder.
@@ -88,7 +193,11 @@ pub async fn download_file(
 
     let mut msgs = client.iter_messages(&peer);
     let mut target_message = None;
-    while let Some(m) = msgs.next().await.map_err(|e| AppError::Telegram(e.to_string()))? {
+    while let Some(m) = msgs
+        .next()
+        .await
+        .map_err(|e| AppError::Telegram(e.to_string()))?
+    {
         if m.id() == message_id {
             target_message = Some(m);
             break;
@@ -161,7 +270,11 @@ pub async fn get_files(
     let mut msgs = client.iter_messages(&peer);
     let mut count = 0;
 
-    while let Some(msg) = msgs.next().await.map_err(|e| AppError::Telegram(e.to_string()))? {
+    while let Some(msg) = msgs
+        .next()
+        .await
+        .map_err(|e| AppError::Telegram(e.to_string()))?
+    {
         if let Some(doc) = msg.media() {
             let (name, size, mime, ext) = match doc {
                 Media::Document(d) => {
@@ -202,10 +315,7 @@ pub async fn get_files(
 }
 
 /// Search for files across all folders using Telegram's SearchGlobal.
-pub async fn search_global(
-    state: &AppState,
-    query: &str,
-) -> Result<Vec<FileMetadata>, AppError> {
+pub async fn search_global(state: &AppState, query: &str) -> Result<Vec<FileMetadata>, AppError> {
     let client = require_client(state).await?;
 
     tracing::info!("Searching global for: {}", query);
@@ -250,9 +360,7 @@ fn extract_files_from_messages(result: tl::enums::messages::Messages) -> Vec<Fil
                         .attributes
                         .iter()
                         .find_map(|a| match a {
-                            tl::enums::DocumentAttribute::Filename(f) => {
-                                Some(f.file_name.clone())
-                            }
+                            tl::enums::DocumentAttribute::Filename(f) => Some(f.file_name.clone()),
                             _ => None,
                         })
                         .unwrap_or_else(|| "Unknown".to_string());
@@ -281,4 +389,39 @@ fn extract_files_from_messages(result: tl::enums::messages::Messages) -> Vec<Fil
         }
     }
     files
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{sanitize_upload_name, should_send_as_photo};
+
+    #[test]
+    fn sanitize_upload_name_removes_path_segments() {
+        assert_eq!(sanitize_upload_name("../../tmp/photo.png"), "photo.png");
+    }
+
+    #[test]
+    fn sanitize_upload_name_falls_back_when_empty() {
+        assert_eq!(sanitize_upload_name("   "), "unnamed");
+    }
+
+    #[test]
+    fn photo_mode_uses_content_type_when_available() {
+        assert!(should_send_as_photo("upload.bin", Some("image/jpeg"), true));
+    }
+
+    #[test]
+    fn photo_mode_uses_extension_when_content_type_missing() {
+        assert!(should_send_as_photo("camera-shot.webp", None, true));
+    }
+
+    #[test]
+    fn photo_mode_rejects_non_images() {
+        assert!(!should_send_as_photo("archive.zip", Some("application/zip"), true));
+    }
+
+    #[test]
+    fn photo_mode_respects_flag() {
+        assert!(!should_send_as_photo("photo.jpg", Some("image/jpeg"), false));
+    }
 }

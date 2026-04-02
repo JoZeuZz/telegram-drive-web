@@ -27,7 +27,8 @@ pub fn save_admin_hash(data_dir: &str, hash: &str) -> Result<(), crate::errors::
     };
     let json = serde_json::to_string_pretty(&admin)
         .map_err(|e| crate::errors::AppError::Internal(e.to_string()))?;
-    std::fs::write(&path, json)
-        .map_err(|e| crate::errors::AppError::Internal(format!("Cannot write admin.json: {}", e)))?;
+    std::fs::write(&path, json).map_err(|e| {
+        crate::errors::AppError::Internal(format!("Cannot write admin.json: {}", e))
+    })?;
     Ok(())
 }

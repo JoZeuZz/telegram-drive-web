@@ -1,5 +1,5 @@
-use grammers_client::Client;
 use grammers_client::types::Peer;
+use grammers_client::Client;
 
 /// Resolve a folder_id to a Telegram Peer by scanning dialogs.
 /// If `folder_id` is None, resolves to the authenticated user (Saved Messages).

@@ -1,6 +1,6 @@
-use thiserror::Error;
 use actix_web::{HttpResponse, ResponseError};
 use serde::Serialize;
+use thiserror::Error;
 
 /// Unified error type for the application.
 #[derive(Debug, Error)]

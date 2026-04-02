@@ -30,9 +30,7 @@ fn prune_preview_cache(cache_dir: &std::path::Path) {
             continue;
         }
         if let Ok(meta) = entry.metadata() {
-            let modified = meta
-                .modified()
-                .unwrap_or(std::time::SystemTime::UNIX_EPOCH);
+            let modified = meta.modified().unwrap_or(std::time::SystemTime::UNIX_EPOCH);
             files.push((path, modified, meta.len()));
         }
     }
@@ -273,10 +271,7 @@ fn media_extension(media: &Media) -> String {
 }
 
 fn is_image_ext(ext: &str) -> bool {
-    matches!(
-        ext,
-        "jpg" | "jpeg" | "png" | "gif" | "webp" | "bmp" | "svg"
-    )
+    matches!(ext, "jpg" | "jpeg" | "png" | "gif" | "webp" | "bmp" | "svg")
 }
 
 fn mime_from_ext(ext: &str) -> &'static str {

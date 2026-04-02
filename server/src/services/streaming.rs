@@ -1,5 +1,5 @@
-use grammers_client::types::Media;
 use futures::stream::Stream;
+use grammers_client::types::Media;
 
 use crate::app_state::AppState;
 use crate::errors::AppError;
@@ -55,7 +55,11 @@ pub async fn prepare_stream(
     let file_name = match &media {
         Media::Document(d) => {
             let n = d.name().to_string();
-            if n.is_empty() { "download.bin".to_string() } else { n }
+            if n.is_empty() {
+                "download.bin".to_string()
+            } else {
+                n
+            }
         }
         Media::Photo(_) => "photo.jpg".to_string(),
         _ => "file.bin".to_string(),

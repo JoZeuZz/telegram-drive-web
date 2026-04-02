@@ -59,7 +59,8 @@ where
             .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
 
         // Store in request extensions so handlers can access it
-        req.extensions_mut().insert(RequestIdValue(request_id.clone()));
+        req.extensions_mut()
+            .insert(RequestIdValue(request_id.clone()));
 
         let srv = Rc::clone(&self.service);
         Box::pin(async move {

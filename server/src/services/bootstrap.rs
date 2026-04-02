@@ -11,7 +11,9 @@ pub fn hash_password(password: &str) -> Result<String, crate::errors::AppError> 
     let argon2 = Argon2::default();
     let hash = argon2
         .hash_password(password.as_bytes(), &salt)
-        .map_err(|e| crate::errors::AppError::Internal(format!("Failed to hash password: {}", e)))?;
+        .map_err(|e| {
+            crate::errors::AppError::Internal(format!("Failed to hash password: {}", e))
+        })?;
     Ok(hash.to_string())
 }
 
@@ -29,15 +31,24 @@ pub fn verify_password(password: &str, hash: &str) -> bool {
 /// Ensure the admin hash file exists in `data_dir`.
 /// If missing, hash `default_password` and persist it.
 /// Returns the stored hash.
-pub fn ensure_admin(data_dir: &str, default_password: &str) -> Result<String, crate::errors::AppError> {
+pub fn ensure_admin(
+    data_dir: &str,
+    default_password: &str,
+) -> Result<String, crate::errors::AppError> {
     if let Some(hash) = storage::app_db::load_admin_hash(data_dir) {
-        tracing::info!("Admin hash loaded from {}", storage::app_db::admin_path(data_dir).display());
+        tracing::info!(
+            "Admin hash loaded from {}",
+            storage::app_db::admin_path(data_dir).display()
+        );
         return Ok(hash);
     }
 
     tracing::info!("No admin.json found — bootstrapping admin user");
     let hashed = hash_password(default_password)?;
     storage::app_db::save_admin_hash(data_dir, &hashed)?;
-    tracing::info!("Admin hash written to {}", storage::app_db::admin_path(data_dir).display());
+    tracing::info!(
+        "Admin hash written to {}",
+        storage::app_db::admin_path(data_dir).display()
+    );
     Ok(hashed)
 }

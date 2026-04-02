@@ -1,8 +1,8 @@
-use std::sync::Arc;
-use std::sync::atomic::AtomicU32;
-use tokio::sync::{Mutex, RwLock};
-use grammers_client::Client;
 use grammers_client::types::{LoginToken, PasswordToken};
+use grammers_client::Client;
+use std::sync::atomic::AtomicU32;
+use std::sync::Arc;
+use tokio::sync::{Mutex, RwLock};
 
 use crate::config::Config;
 
@@ -26,6 +26,8 @@ pub struct AppState {
     pub cache_dir: String,
     /// Session secret for cookie signing
     pub session_secret: String,
+    /// Maximum upload size allowed per file (bytes)
+    pub max_file_size_bytes: u64,
     /// Telegram API ID from config
     pub config_api_id: i32,
     /// Telegram API hash from config
@@ -55,6 +57,7 @@ impl AppState {
             data_dir: config.data_dir.clone(),
             cache_dir: config.cache_dir.clone(),
             session_secret: config.session_secret.clone(),
+            max_file_size_bytes: config.max_file_size_bytes,
             config_api_id: config.telegram_api_id,
             config_api_hash: config.telegram_api_hash.clone(),
             admin_password_hash: RwLock::new(admin_password_hash),

@@ -40,6 +40,8 @@
 - Improved multi-selection UX with Shift+click and Shift+Arrow range extension based on visible ordering.
 - Added progressive delete feedback (in-progress state, counters, action disabling, and toasts) for single and bulk deletes.
 - Added hierarchical folder UX and API behavior for `parent_id`, subtree-aware sync state, and cascade delete reporting (`deleted_count`).
+- Folder hierarchy sync now resolves parent metadata primarily from channel title (`[TD|s=1|p=...]`), with legacy `about` fallback using bounded retry/backoff and FLOOD_WAIT early cutoff.
+- Added lazy migration for legacy folder titles during sync and exposed sync integrity summary in `/api/folders/sync` (`resolved_by_title`, `resolved_by_about`, `orphans`, `migrated`) for frontend visibility.
 
 ## [1.0.4] - 2026-02-13
 

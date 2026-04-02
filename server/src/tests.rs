@@ -8,9 +8,11 @@ use std::sync::Arc;
 
 use crate::app_state::AppState;
 use crate::config::{AppEnv, Config};
+use crate::domain::dto::UploadQuery;
 use crate::http;
 use crate::services::bandwidth::BandwidthManager;
 use crate::services::bootstrap;
+use crate::services::upload_progress::UploadProgressManager;
 use crate::services::upload_queue::UploadQueue;
 
 fn test_config(data_dir: &str) -> Config {
@@ -25,6 +27,7 @@ fn test_config(data_dir: &str) -> Config {
         session_secret: "test-secret-for-integration-tests".into(),
         cookie_secure: false,
         session_ttl_hours: 8,
+        max_file_size_bytes: 2_097_152_000,
         admin_password: "testpass".into(),
         trust_proxy_headers: false,
         app_auth_rate_limit_max_requests: 10,
@@ -40,6 +43,7 @@ struct TestEnv {
     state: web::Data<AppState>,
     bw: web::Data<BandwidthManager>,
     queue: web::Data<UploadQueue>,
+    progress: web::Data<UploadProgressManager>,
     route_config: http::RouteConfig,
     cookie_key: Key,
 }
@@ -53,11 +57,13 @@ impl TestEnv {
         let state_arc = Arc::new(AppState::new(&config, hash));
         let bw_arc = Arc::new(BandwidthManager::new(dir));
         let queue = UploadQueue::new(state_arc.clone(), bw_arc.clone(), 2);
+        let progress = UploadProgressManager::new();
 
         Self {
             state: web::Data::from(state_arc),
             bw: web::Data::from(bw_arc),
             queue: web::Data::new(queue),
+            progress: web::Data::new(progress),
             route_config: http::RouteConfig::from_config(&config),
             cookie_key: Key::generate(),
         }
@@ -84,7 +90,10 @@ macro_rules! test_app {
                 .app_data($env.state.clone())
                 .app_data($env.bw.clone())
                 .app_data($env.queue.clone())
-                .app_data(web::PayloadConfig::new(512 * 1024 * 1024))
+                .app_data($env.progress.clone())
+                .app_data(web::PayloadConfig::new(
+                    usize::try_from($env.state.max_file_size_bytes).unwrap_or(usize::MAX),
+                ))
                 .configure(|cfg| http::configure_routes(cfg, $env.route_config)),
         )
         .await
@@ -347,6 +356,7 @@ async fn metrics_returns_operational_data() {
     assert!(body["uptime_secs"].is_number());
     assert!(body["cache_bytes"].is_number());
     assert!(body["cache_files"].is_number());
+    assert_eq!(body["max_file_size_bytes"], 2_097_152_000u64);
     assert!(body["bandwidth"]["date"].is_string());
     assert_eq!(body["telegram_connected"], false);
     assert_eq!(body["upload_queue_length"], 0);
@@ -413,4 +423,27 @@ async fn bootstrap_changes_password() {
         .to_request();
     let resp = test::call_service(&app, req).await;
     assert_eq!(resp.status(), StatusCode::OK);
+}
+
+#[actix_web::test]
+async fn upload_query_defaults_to_document_mode() {
+    let query = web::Query::<UploadQuery>::from_query("folder_id=42")
+        .expect("query should parse with defaults");
+    assert_eq!(query.folder_id, Some(42));
+    assert!(!query.queue);
+    assert!(!query.as_photo);
+    assert_eq!(query.upload_id, None);
+    assert_eq!(query.upload_size_bytes, None);
+}
+
+#[actix_web::test]
+async fn upload_query_parses_photo_mode_flag() {
+    let query = web::Query::<UploadQuery>::from_query(
+        "queue=true&as_photo=true&upload_id=test-123&upload_size_bytes=2048",
+    )
+        .expect("query should parse explicit flags");
+    assert!(query.queue);
+    assert!(query.as_photo);
+    assert_eq!(query.upload_id.as_deref(), Some("test-123"));
+    assert_eq!(query.upload_size_bytes, Some(2048));
 }

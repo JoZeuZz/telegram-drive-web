@@ -50,7 +50,9 @@ pub fn configure_routes(cfg: &mut web::ServiceConfig, route_config: RouteConfig)
                 web::scope("")
                     .wrap(middleware::auth::RequireAuth)
                     .wrap(middleware::csrf::CsrfCheck)
-                    .wrap(middleware::audit::AuditLog)
+                    .wrap(middleware::audit::AuditLog::new(
+                        route_config.trust_proxy_headers,
+                    ))
                     .service(
                         web::scope("/telegram/auth")
                             .wrap(

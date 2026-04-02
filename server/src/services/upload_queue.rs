@@ -14,8 +14,10 @@ pub struct UploadJob {
     pub id: String,
     pub file_path: String,
     pub file_name: String,
+    pub content_type: Option<String>,
     pub folder_id: Option<i64>,
     pub size: u64,
+    pub as_photo: bool,
 }
 
 /// Status of a queued upload.
@@ -51,14 +53,9 @@ pub struct UploadQueue {
 
 impl UploadQueue {
     /// Create a new upload queue and spawn a background processor.
-    pub fn new(
-        state: Arc<AppState>,
-        bw: Arc<BandwidthManager>,
-        max_concurrent: usize,
-    ) -> Self {
+    pub fn new(state: Arc<AppState>, bw: Arc<BandwidthManager>, max_concurrent: usize) -> Self {
         let (tx, rx) = mpsc::channel::<UploadJob>(256);
-        let jobs: Arc<RwLock<HashMap<String, JobEntry>>> =
-            Arc::new(RwLock::new(HashMap::new()));
+        let jobs: Arc<RwLock<HashMap<String, JobEntry>>> = Arc::new(RwLock::new(HashMap::new()));
 
         let queue = Self {
             tx,
@@ -165,8 +162,17 @@ impl UploadQueue {
                 }
 
                 // Perform the upload
-                let result =
-                    telegram_files::upload_file(&state, &bw, &job.file_path, job.folder_id).await;
+                let result = telegram_files::upload_file(
+                    &state,
+                    &bw,
+                    &job.file_path,
+                    job.folder_id,
+                    &job.file_name,
+                    job.content_type.as_deref(),
+                    job.as_photo,
+                    None,
+                )
+                .await;
 
                 // Update status
                 {

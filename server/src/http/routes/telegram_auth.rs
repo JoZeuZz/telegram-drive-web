@@ -23,7 +23,9 @@ async fn connect(
 /// GET /api/telegram/auth/status
 #[get("/status")]
 async fn status(state: web::Data<AppState>) -> Result<HttpResponse, AppError> {
-    let connected = telegram_auth::check_connection(&state).await.unwrap_or(false);
+    let connected = telegram_auth::check_connection(&state)
+        .await
+        .unwrap_or(false);
     Ok(HttpResponse::Ok().json(TelegramStatusResponse { connected }))
 }
 

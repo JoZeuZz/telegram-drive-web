@@ -160,7 +160,7 @@ List files in a folder. Omit `folder_id` for Saved Messages (root).
 ]
 ```
 
-### `POST /api/files/upload?folder_id=<id>&queue=<bool>`
+### `POST /api/files/upload?folder_id=<id>&queue=<bool>&as_photo=<bool>`
 
 Upload a file via `multipart/form-data`.
 
@@ -168,6 +168,17 @@ Upload a file via `multipart/form-data`.
 |---|---|---|---|
 | `folder_id` | `i64?` | `null` | Target folder (channel ID). |
 | `queue` | `bool` | `false` | If `true`, enqueue for background upload. |
+| `as_photo` | `bool` | `false` | If `true` and file is an image, upload as Telegram photo media. |
+
+Upload limits:
+- Per-file limit is enforced by `MAX_FILE_SIZE_BYTES` (default: `2097152000` bytes, ~2 GB decimal).
+- Request payload is also capped by backend payload configuration and reverse proxy limits.
+- Telegram account limits still apply (typically ~2 GB for non-Premium and ~4 GB for Premium accounts).
+
+Upload behavior:
+- Uploads use the original multipart filename when sending document/file media.
+- `as_photo=true` prioritizes Telegram photo UX for images and does not guarantee exact filename preservation.
+- `as_photo=false` sends document/file media and preserves filename/extension in Telegram attributes.
 
 **Synchronous** (`queue=false`) — Response `200`
 ```json
@@ -216,7 +227,7 @@ Move files between folders.
 
 ### `GET /api/folders`
 
-List all Telegram Drive folders (channels with `[TD]` tag).
+List all Telegram Drive folders (channels with Telegram Drive metadata in title/legacy marker).
 
 **Response** `200`
 ```json
@@ -249,6 +260,26 @@ Delete a folder branch in cascade order (children first, then parent).
 { "success": true, "deleted_count": 3 }
 ```
 
+### `POST /api/folders/sync`
+
+Force a Telegram folder rescan and return integrity metrics for hierarchy resolution.
+
+**Response** `200`
+```json
+{
+  "folders": [
+    { "id": 456, "name": "Documents", "parent_id": null },
+    { "id": 789, "name": "Photos", "parent_id": 456 }
+  ],
+  "summary": {
+    "resolved_by_title": 1,
+    "resolved_by_about": 1,
+    "orphans": 0,
+    "migrated": 1
+  }
+}
+```
+
 ---
 
 ## Search *(protected)*
@@ -269,7 +300,7 @@ Stream a media file (video, audio) directly from Telegram. Returns a chunked res
 
 ### `GET /api/media/preview/{message_id}?folder_id=<id>`
 
-Get a full preview of a media file. Results are cached in `CACHE_DIR/previews/`.
+Get a full preview of a media file. Results are cached in `CACHE_DIR/media/`.
 
 ### `GET /api/media/thumbnail/{message_id}?folder_id=<id>`
 
@@ -357,6 +388,7 @@ Operational runtime metrics.
   "uptime_secs": 3600,
   "cache_bytes": 12345,
   "cache_files": 12,
+  "max_file_size_bytes": 2097152000,
   "bandwidth": { "date": "2026-03-31", "up_bytes": 0, "down_bytes": 0 },
   "telegram_connected": false,
   "upload_queue_length": 0
@@ -381,12 +413,3 @@ All errors return JSON:
 | `404` | Resource not found |
 | `502` | Telegram error (upstream) |
 | `500` | Internal server error |
-
----
-
-## Planned (Phase 5+)
-
-| Method | Path | Description |
-|--------|------|-------------|
-| `POST` | `/api/admin/clean-cache` | Clear preview/thumbnail cache |
-| `GET` | `/api/metrics` | Server metrics |

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { HardDrive, Folder, Plus, RefreshCw, LogOut } from 'lucide-react';
 import { SidebarItem } from './SidebarItem';
 import { BandwidthWidget } from './BandwidthWidget';
-import { TelegramFolder, BandwidthStats } from '../../types';
+import { BandwidthStats, FolderSyncSummary, TelegramFolder } from '../../types';
 
 interface SidebarProps {
     folders: TelegramFolder[];
@@ -13,6 +13,7 @@ interface SidebarProps {
     onCreate: (name: string, parentId?: number | null) => Promise<void>;
     isSyncing: boolean;
     isConnected: boolean;
+    syncSummary: FolderSyncSummary | null;
     onSync: () => void;
     onLogout: () => void;
     bandwidth: BandwidthStats | null;
@@ -20,7 +21,7 @@ interface SidebarProps {
 
 export function Sidebar({
     folders, activeFolderId, setActiveFolderId, onDrop, onDelete, onCreate,
-    isSyncing, isConnected, onSync, onLogout, bandwidth
+    isSyncing, isConnected, syncSummary, onSync, onLogout, bandwidth
 }: SidebarProps) {
     const [createTargetParentId, setCreateTargetParentId] = useState<number | null | undefined>(undefined);
     const [newFolderName, setNewFolderName] = useState("");
@@ -248,6 +249,19 @@ export function Sidebar({
                         Logout
                     </button>
                 </div>
+
+                {syncSummary && (
+                    <div className="mt-3 text-[11px] leading-4">
+                        <div className="text-telegram-subtext">
+                            Sync: title {syncSummary.resolved_by_title}, fallback {syncSummary.resolved_by_about}, migrated {syncSummary.migrated}
+                        </div>
+                        {syncSummary.orphans > 0 && (
+                            <div className="text-amber-400 mt-1">
+                                Warning: {syncSummary.orphans} orphan folder(s) rendered at root.
+                            </div>
+                        )}
+                    </div>
+                )}
 
                 {bandwidth && <BandwidthWidget bandwidth={bandwidth} />}
             </div>

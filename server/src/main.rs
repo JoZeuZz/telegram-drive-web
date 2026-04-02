@@ -6,7 +6,12 @@ use telegram_drive_server::{
     app_state::AppState,
     config::Config,
     http, jobs,
-    services::{bandwidth::BandwidthManager, bootstrap, upload_queue::UploadQueue},
+    services::{
+        bandwidth::BandwidthManager,
+        bootstrap,
+        upload_progress::UploadProgressManager,
+        upload_queue::UploadQueue,
+    },
 };
 
 #[actix_web::main]
@@ -71,6 +76,7 @@ async fn main() -> std::io::Result<()> {
     let state_arc = Arc::new(AppState::new(&config, admin_hash));
     let bw_arc = Arc::new(BandwidthManager::new(&config.data_dir));
     let upload_queue = UploadQueue::new(state_arc.clone(), bw_arc.clone(), 3);
+    let upload_progress = actix_web::web::Data::new(UploadProgressManager::new());
 
     let state = actix_web::web::Data::from(state_arc.clone());
     let bw = actix_web::web::Data::from(bw_arc);
@@ -84,6 +90,7 @@ async fn main() -> std::io::Result<()> {
     let bind_host = config.host.clone();
     let bind_port = config.port;
     let route_config = http::RouteConfig::from_config(&config);
+    let payload_limit = usize::try_from(config.max_file_size_bytes).unwrap_or(usize::MAX);
 
     // Start HTTP server
     actix_web::HttpServer::new(move || {
@@ -112,7 +119,8 @@ async fn main() -> std::io::Result<()> {
             .app_data(state.clone())
             .app_data(bw.clone())
             .app_data(upload_queue.clone())
-            .app_data(actix_web::web::PayloadConfig::new(512 * 1024 * 1024))
+                .app_data(upload_progress.clone())
+            .app_data(actix_web::web::PayloadConfig::new(payload_limit))
             .configure(|cfg| http::configure_routes(cfg, route_config))
     })
     .bind((bind_host.as_str(), bind_port))?

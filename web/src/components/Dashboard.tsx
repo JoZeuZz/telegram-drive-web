@@ -32,7 +32,7 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
 
     const {
         folders, activeFolderId, setActiveFolderId, isSyncing, isConnected,
-        handleLogout, handleSyncFolders, handleCreateFolder, handleFolderDelete
+        lastSyncSummary, handleLogout, handleSyncFolders, handleCreateFolder, handleFolderDelete
     } = useTelegramConnection(onLogout);
 
 
@@ -102,6 +102,14 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
         refetchOnWindowFocus: false,
     });
 
+    const { data: metrics } = useQuery({
+        queryKey: ['metrics'],
+        queryFn: () => api.getMetrics(),
+        enabled: isWindowVisible,
+        refetchOnWindowFocus: false,
+        staleTime: 60_000,
+    });
+
 
     const {
         handleDelete, handleBulkDelete, handleDownload, handleBulkDownload,
@@ -109,7 +117,10 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
 
     } = useFileOperations(activeFolderId, selectedIds, setSelectedIds, displayedFiles);
 
-    const { uploadQueue, setUploadQueue, handleManualUpload, isDragging } = useFileUpload(activeFolderId);
+    const { uploadQueue, setUploadQueue, cancelQueueItem, handleManualUpload, isDragging } = useFileUpload(
+        activeFolderId,
+        metrics?.max_file_size_bytes,
+    );
     const { downloadQueue, clearFinished: clearDownloads } = useFileDownload();
 
 
@@ -448,6 +459,7 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
                 onCreate={handleCreateFolder}
                 isSyncing={isSyncing}
                 isConnected={isConnected}
+                syncSummary={lastSyncSummary}
                 onSync={handleSyncFolders}
                 onLogout={handleLogout}
                 bandwidth={bandwidth || null}
@@ -513,7 +525,10 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
 
             <UploadQueue
                 items={uploadQueue}
-                onClearFinished={() => setUploadQueue(q => q.filter(i => i.status !== 'success' && i.status !== 'error'))}
+                onCancelItem={cancelQueueItem}
+                onClearFinished={() => setUploadQueue(q => q.filter(
+                    i => i.status !== 'success' && i.status !== 'error' && i.status !== 'cancelled',
+                ))}
             />
             <DownloadQueue
                 items={downloadQueue}

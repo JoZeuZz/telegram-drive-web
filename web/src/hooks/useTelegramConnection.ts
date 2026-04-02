@@ -3,7 +3,7 @@ import * as api from '../lib/api';
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { useConfirm } from '../context/ConfirmContext';
-import { TelegramFolder } from '../types';
+import { FolderSyncSummary, TelegramFolder } from '../types';
 import { useNetworkStatus } from './useNetworkStatus';
 
 /** Read a JSON value from localStorage */
@@ -70,6 +70,7 @@ export function useTelegramConnection(onLogoutParent: () => void) {
     const [activeFolderId, setActiveFolderId] = useState<number | null>(null);
     const [isSyncing, setIsSyncing] = useState(false);
     const [isConnected, setIsConnected] = useState(true);
+    const [lastSyncSummary, setLastSyncSummary] = useState<FolderSyncSummary | null>(null);
 
 
     const networkIsOnline = useNetworkStatus();
@@ -141,7 +142,8 @@ export function useTelegramConnection(onLogoutParent: () => void) {
     const handleSyncFolders = async () => {
         setIsSyncing(true);
         try {
-            const foundFolders = normalizeFolders(await api.listFolders());
+            const syncResult = await api.syncFolders();
+            const foundFolders = normalizeFolders(syncResult.folders);
             const oldById = new Map(folders.map((f) => [f.id, f]));
 
             let added = 0;
@@ -168,16 +170,23 @@ export function useTelegramConnection(onLogoutParent: () => void) {
 
             setFolders(foundFolders);
             lsSet('folders', foundFolders);
+            setLastSyncSummary(syncResult.summary);
 
             if (activeFolderId !== null && !foundFolders.some((f) => f.id === activeFolderId)) {
                 setActiveFolderId(null);
                 lsSet('activeFolderId', null);
             }
 
+            const detail = `title:${syncResult.summary.resolved_by_title} fallback:${syncResult.summary.resolved_by_about} migrated:${syncResult.summary.migrated}`;
+
             if (added > 0 || updated > 0 || removed > 0) {
-                toast.success(`Sync complete. +${added} new, ~${updated} updated, -${removed} removed.`);
+                toast.success(`Sync complete. +${added} new, ~${updated} updated, -${removed} removed (${detail}).`);
             } else {
-                toast.info('Sync complete. No folder changes found.');
+                toast.info(`Sync complete. No folder changes found (${detail}).`);
+            }
+
+            if (syncResult.summary.orphans > 0) {
+                toast.warning(`Sync detected ${syncResult.summary.orphans} orphan folder(s). They are shown at root until parent metadata is restored.`);
             }
         } catch {
             toast.error("Sync failed");
@@ -276,6 +285,7 @@ export function useTelegramConnection(onLogoutParent: () => void) {
         activeFolderId,
         setActiveFolderId: handleSetActiveFolderId,
         isSyncing,
+        lastSyncSummary,
         isConnected,
         handleLogout,
         handleSyncFolders,

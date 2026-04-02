@@ -12,6 +12,7 @@ struct MetricsResponse {
     uptime_secs: u64,
     cache_bytes: u64,
     cache_files: usize,
+    max_file_size_bytes: u64,
     bandwidth: BandwidthSnapshot,
     telegram_connected: bool,
     upload_queue_length: usize,
@@ -47,6 +48,7 @@ async fn metrics(
         uptime_secs,
         cache_bytes,
         cache_files,
+        max_file_size_bytes: state.max_file_size_bytes,
         bandwidth: BandwidthSnapshot {
             date: bw_stats.date,
             up_bytes: bw_stats.up_bytes,

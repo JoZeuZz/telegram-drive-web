@@ -109,6 +109,7 @@ LOG_FORMAT=json
 COOKIE_SECURE=true
 TRUST_PROXY_HEADERS=true
 SESSION_TTL_HOURS=8
+MAX_FILE_SIZE_BYTES=2097152000
 APP_AUTH_RATE_LIMIT_MAX_REQUESTS=10
 APP_AUTH_RATE_LIMIT_WINDOW_SECS=60
 TELEGRAM_AUTH_RATE_LIMIT_MAX_REQUESTS=5
@@ -141,7 +142,7 @@ systemctl enable --now telegram-drive-web
 
 # Check status
 systemctl status telegram-drive-web
-journalctl -u telegram-drive -f
+journalctl -u telegram-drive-web -f
 ```
 
 ## 7. Configure reverse proxy
@@ -164,6 +165,9 @@ nginx -t && systemctl reload nginx
 ```bash
 apt-get install -y caddy
 cp deploy/caddy/Caddyfile /etc/caddy/Caddyfile
+
+# Validate config before reload (rate_limit requires compatible Caddy build)
+caddy validate --config /etc/caddy/Caddyfile
 
 # Edit the domain
 nano /etc/caddy/Caddyfile
@@ -232,7 +236,7 @@ systemctl start telegram-drive-web
 
 ```bash
 # Live logs (structured JSON)
-journalctl -u telegram-drive -f -o cat
+journalctl -u telegram-drive-web -f -o cat
 
 # Health with jq
 watch -n 30 'curl -s http://127.0.0.1:8080/api/health | jq .'
@@ -246,7 +250,7 @@ du -sh /opt/telegram-drive-web/data/cache
 | Symptom | Fix |
 |---|---|
 | `ENOSPC` or disk full | Cache cleanup runs every 30 min, but you can reduce `MAX_CACHE_BYTES` or manually `rm -rf data/cache/*` |
-| Telegram disconnects | The reconnect job retries every 60 s. Check `journalctl -u telegram-drive --since "5 min ago"` |
+| Telegram disconnects | The reconnect job retries every 60 s. Check `journalctl -u telegram-drive-web --since "5 min ago"` |
 | 429 Too Many Requests | Rate limiter is active. Wait 60 seconds or check the login rate limit config |
 | Can't bind port 8080 | Another process may be using it. Use `ss -tlnp \| grep 8080` to check |
 | Session cookie not set | Ensure your reverse proxy forwards `Cookie` and `Set-Cookie` headers correctly |

@@ -15,13 +15,14 @@ This application is designed for **single-user, homelab deployment behind a VPN*
 - The app has its own login system independent of Telegram
 - On first run, a bootstrap flow creates the admin user
 - Passwords are hashed with **argon2** (not bcrypt, not plain SHA)
-- Sessions use **HttpOnly, SameSite=Strict** cookies, with `COOKIE_SECURE=true` recommended behind TLS
+- Sessions use **HttpOnly, SameSite=Strict** cookies; `COOKIE_SECURE=true` is required in production
 - Session state is stored using cookie-based sessions (`CookieSessionStore`), not in SQLite
 - Session TTL is controlled via `SESSION_TTL_HOURS` (default: 8h)
 - No JWT — stateful sessions are simpler and revocable
 - Environment policy:
   - `APP_ENV=development` allows local defaults but logs warnings for weak settings
   - `APP_ENV=production` enforces fail-fast validation at startup for weak/unsafe values
+  - `SESSION_SECRET` must be explicitly set in production
 
 ### Telegram auth
 - Telegram API credentials (api_id, api_hash) are stored server-side in `.env`
@@ -54,7 +55,11 @@ This application is designed for **single-user, homelab deployment behind a VPN*
 ## Input validation
 
 - All user input is validated at the HTTP layer before reaching services
-- File uploads are checked for size limits
+- File uploads are checked against `MAX_FILE_SIZE_BYTES` (default: `2097152000`, ~2 GB decimal)
+- Request payload size is capped by backend payload configuration and reverse proxy limits
+- Upload mode `as_photo=true` can prioritize Telegram photo UX for images, which does not guarantee exact filename preservation
+- Upload mode `as_photo=false` sends document/file media and preserves filename/extension metadata
+- ZIP and archive uploads are treated as opaque files (no internal archive inspection)
 - Path traversal is prevented in all file operations
 
 ## Deployment hardening

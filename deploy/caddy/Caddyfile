@@ -14,7 +14,9 @@ telegram-drive.example.com {
         -Server
     }
 
-    # Login rate limit: 5 events per minute
+    # Login rate limit: 5 events per minute.
+    # Requires a Caddy build that supports `rate_limit` (Caddy >= 2.7).
+    # If unavailable, remove this block and rely on backend rate limiting.
     @login path /api/app-auth/login
     rate_limit @login {
         zone login {
@@ -25,6 +27,9 @@ telegram-drive.example.com {
     }
 
     # API reverse proxy
+    # Note: this template does not set an explicit edge request-body cap.
+    # Effective upload limit is enforced by backend MAX_FILE_SIZE_BYTES.
+    # If you add an edge cap here, keep it >= backend limit (default ~2 GB).
     handle /api/* {
         reverse_proxy 127.0.0.1:8080 {
             header_up X-Forwarded-For {remote_host}

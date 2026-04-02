@@ -37,6 +37,7 @@ pub struct Config {
     pub session_secret: String,
     pub cookie_secure: bool,
     pub session_ttl_hours: i64,
+    pub max_file_size_bytes: u64,
     pub admin_password: String,
     pub trust_proxy_headers: bool,
     pub app_auth_rate_limit_max_requests: u32,
@@ -57,6 +58,13 @@ fn env_bool(name: &str, default: bool) -> bool {
             )
         })
         .unwrap_or(default)
+}
+
+fn env_non_empty(name: &str) -> Option<String> {
+    std::env::var(name)
+        .ok()
+        .map(|v| v.trim().to_string())
+        .filter(|v| !v.is_empty())
 }
 
 fn env_positive_i64(name: &str, default: i64) -> i64 {
@@ -125,6 +133,19 @@ impl Config {
             .unwrap_or(3000);
         let cors_allowed_origin = std::env::var("CORS_ALLOWED_ORIGIN")
             .unwrap_or_else(|_| format!("http://localhost:{}", frontend_port));
+        let session_secret = match env_non_empty("SESSION_SECRET") {
+            Some(value) => value,
+            None if app_env.is_production() => {
+                tracing::error!("SESSION_SECRET is required in production and cannot be empty");
+                String::new()
+            }
+            None => {
+                tracing::warn!(
+                    "SESSION_SECRET not set — using random ephemeral secret (sessions reset on restart)"
+                );
+                uuid::Uuid::new_v4().to_string()
+            }
+        };
 
         Self {
             app_env,
@@ -137,12 +158,10 @@ impl Config {
             cors_allowed_origin,
             data_dir,
             cache_dir,
-            session_secret: std::env::var("SESSION_SECRET").unwrap_or_else(|_| {
-                tracing::warn!("SESSION_SECRET not set — using random ephemeral secret");
-                uuid::Uuid::new_v4().to_string()
-            }),
+            session_secret,
             cookie_secure: env_bool("COOKIE_SECURE", false),
             session_ttl_hours: env_positive_i64("SESSION_TTL_HOURS", 8),
+            max_file_size_bytes: env_positive_u64("MAX_FILE_SIZE_BYTES", 2_097_152_000),
             admin_password: std::env::var("ADMIN_PASSWORD")
                 .unwrap_or_else(|_| "changeme".to_string()),
             trust_proxy_headers: env_bool("TRUST_PROXY_HEADERS", false),
@@ -238,6 +257,7 @@ mod tests {
                 .into(),
             cookie_secure: true,
             session_ttl_hours: 8,
+            max_file_size_bytes: 512_u64 * 1024 * 1024,
             admin_password: "correct-horse-battery-staple".into(),
             trust_proxy_headers: true,
             app_auth_rate_limit_max_requests: 10,
